@@ -1,6 +1,6 @@
 # ADR-0003: Keep local AI repeatable and real-provider evaluation separate
 
-Status: proposed; subject to the final architecture review.
+Status: accepted as the architecture baseline on 2026-11-16. Implementation and compatibility evidence remain required.
 
 ## Context
 

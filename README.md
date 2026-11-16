@@ -4,9 +4,9 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Design phase.** This repository currently contains the architecture proposal, contracts, ADRs, threat model, and implementation/verification plans. There is no runnable application, Docker environment, or CI pipeline yet. The architecture will be reviewed before implementation starts.
+**Foundation phase, in preparation.** This repository currently contains the architecture proposal, contracts, ADRs, threat model, and implementation/verification plans. There is no runnable application, Docker environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
 
-All behavior below is planned, not an implementation claim.
+All application behavior below is planned, not an implementation claim.
 
 ## Use case
 
@@ -28,7 +28,7 @@ The proposed design uses two application services: a NestJS API and a worker. Th
 | Docker Compose | Reproducible local environment |
 | OpenTelemetry | Traces and metrics across HTTP, events, and AI operations |
 
-PostgreSQL is the source of truth. Redis must not be required for business correctness. The proposed boundaries, contracts, and tradeoffs are recorded in the [documentation map](docs/README.md) and ADRs; they remain subject to architecture approval.
+PostgreSQL is the source of truth. Redis must not be required for business correctness. The proposed boundaries, contracts, and tradeoffs are recorded in the [documentation map](docs/README.md) and ADRs; the baseline was accepted on 2026-11-16, with implementation evidence still required.
 
 ## Behaviors to demonstrate
 

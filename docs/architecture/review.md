@@ -1,6 +1,6 @@
 # Architecture review checklist
 
-Status: ready for owner review, not approved for implementation. Documentation-only commits are authorized independently of this gate.
+Status: architecture baseline accepted on 2026-11-16. The owner authorized phase 1 after the roadmap review. Preparing implementation is authorized; committing non-documentation changes still requires exact-patch approval.
 
 ## Decision summary
 
@@ -21,17 +21,17 @@ Status: ready for owner review, not approved for implementation. Documentation-o
 
 The owner reviews these artifacts before authorizing the first code patch:
 
-- [ ] Component responsibilities and shared-database tradeoff are acceptable.
-- [ ] HTTP/event contracts define stable receipts, errors, replay, and versioning.
-- [ ] Transactions, uniqueness, leases, and stale-result protection are understandable and testable.
-- [ ] Tenant visibility, local credentials, operational trust, and security limitations are acceptable.
-- [ ] Offline lexical/scripted mode is labeled honestly; real-provider evaluation remains separate.
-- [ ] Tool scope, budgets, retries, shutdown, and recovery procedures are bounded.
-- [ ] CLI and failure scenarios can demonstrate the guarantees without an application frontend.
-- [ ] Test and release evidence is sufficient; no application tests are currently claimed passing.
-- [ ] ADRs and implementation phases are accepted, with recorded deviations if required.
+- [x] Component responsibilities and shared-database tradeoff are acceptable.
+- [x] HTTP/event contracts define stable receipts, errors, replay, and versioning.
+- [x] Transactions, uniqueness, leases, and stale-result protection are understandable and testable.
+- [x] Tenant visibility, local credentials, operational trust, and security limitations are acceptable.
+- [x] Offline lexical/scripted mode is labeled honestly; real-provider evaluation remains separate.
+- [x] Tool scope, budgets, retries, shutdown, and recovery procedures are bounded.
+- [x] CLI and failure scenarios can demonstrate the guarantees without an application frontend.
+- [x] Test and release evidence is sufficient; no application tests are currently claimed passing.
+- [x] ADRs and implementation phases are accepted, with recorded deviations if required.
 
-Unchecked items mean owner approval has not been recorded, not that documents are missing. After explicit approval, record the date, approving instruction, ADR status, and any exclusions in a focused documentation update. Do not infer implementation authorization from committing or pushing this checklist.
+Approval record: on 2026-11-16, the owner instructed us to proceed after the phase-0 approval and phase-1 foundation steps were explained. This accepts the baseline design, including the documented limitations and optional real-provider scope. Compatibility, security controls, and acceptance scenarios still require implementation evidence. Commit or push permission is not implied.
 
 ## Implementation-time validation
 
@@ -39,6 +39,6 @@ Exact security-patched dependency versions, container digests, broker/client com
 
 Optional real-provider/model selection is deferred to that feature's patch. Before a working release, the owner selects a license and a private reporting channel. These choices do not justify writing unreviewed application code now.
 
-## Completion evidence today
+## Evidence at architecture approval
 
 Only documentation exists. Local checks may validate links, examples, whitespace, and document consistency. No executable app, container environment, automated test suite, latency result, security control, or release pipeline is implemented.

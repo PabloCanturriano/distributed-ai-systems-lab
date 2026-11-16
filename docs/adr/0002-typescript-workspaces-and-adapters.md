@@ -1,6 +1,6 @@
 # ADR-0002: Use a small TypeScript monorepo with explicit adapters
 
-Status: proposed; subject to the final architecture review.
+Status: accepted as the architecture baseline on 2026-11-16. Implementation and compatibility evidence remain required.
 
 ## Context
 

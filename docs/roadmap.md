@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: proposed implementation plan. Architecture documents exist; application phases have not started.
+Status: architecture baseline accepted on 2026-11-16; phase 1 is in preparation. No application acceptance scenario has passed yet.
 
 ## Phase 0: architecture review
 
@@ -24,7 +24,7 @@ Exit: HTTP-01 through HTTP-05, EVENT-01 through EVENT-03, DATA-01 through DATA-0
 
 Deliverables: classified retries and exhaustion, dead-letter notifications, expected-generation replay, durable quarantine/repair, stale-generation defense, full telemetry, and host-orchestrated failure scenarios.
 
-Exit: remaining HTTP/EVENT/DATA cases, REC-01 through REC-06, OBS-01 through OBS-04, and scenario-related CLI checks pass. Demonstrate crashes after publication, after scheduling, and after an external response before persistence. Preserve and explain possible repeated external calls.
+Exit: remaining HTTP/EVENT cases and DATA-01 through DATA-07 plus DATA-09 through DATA-10, REC-01 through REC-06, OBS-01 through OBS-04, and scenario-related CLI checks pass. Demonstrate crashes after publication, after scheduling, and after an external response before persistence. Preserve and explain possible repeated external calls.
 
 ## Phase 4: offline retrieval and evidence
 

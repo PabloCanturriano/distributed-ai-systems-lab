@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in design phase. All application behavior is proposed unless an implemented revision and verification result are explicitly linked. The Markdown design baseline is ready for owner review; it is not an application release.
+The repository is in design phase. All application behavior is proposed unless an implemented revision and verification result are explicitly linked. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -29,11 +29,11 @@ The repository is in design phase. All application behavior is proposed unless a
 
 ## Decision records
 
-| ADR | Proposed decision |
+| ADR | Accepted baseline decision |
 | --- | --- |
 | [0001](adr/0001-durable-ai-execution.md) | Separate event delivery from durable AI execution |
 | [0002](adr/0002-typescript-workspaces-and-adapters.md) | Small TypeScript workspaces and explicit adapters |
 | [0003](adr/0003-offline-ai-and-evaluation-boundaries.md) | Repeatable offline mode and separate real-provider evaluations |
 | [0004](adr/0004-local-identity-and-deployment-scope.md) | Local identity and deployment boundary |
 
-ADRs remain proposed until the owner approves the complete architecture. Updating a design record does not implement its controls or change non-documentation commit permissions.
+ADRs were accepted on 2026-11-16. Updating or accepting a design record does not implement its controls or change non-documentation commit permissions.

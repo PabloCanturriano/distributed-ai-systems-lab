@@ -1,6 +1,6 @@
 # ADR-0001: Separate event delivery from durable AI execution
 
-Status: proposed. The design direction has been discussed with the owner; implementation remains subject to the complete architecture review.
+Status: accepted as the architecture baseline on 2026-11-16. Implementation and compatibility evidence remain required.
 
 ## Context
 

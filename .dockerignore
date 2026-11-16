@@ -1,0 +1,22 @@
+# Only explicit build inputs enter the context. Host caches, secrets, and Git stay out.
+**
+!package.json
+!package-lock.json
+!tsconfig.base.json
+!apps/
+!apps/api/
+!apps/api/package.json
+!apps/api/tsconfig.json
+!apps/api/src/
+!apps/api/src/**
+!apps/worker/
+!apps/worker/package.json
+!apps/worker/tsconfig.json
+!apps/worker/src/
+!apps/worker/src/**
+!packages/
+!packages/configuration/
+!packages/configuration/package.json
+!packages/configuration/tsconfig.json
+!packages/configuration/src/
+!packages/configuration/src/**

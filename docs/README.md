@@ -14,6 +14,8 @@ The repository is entering phase 1. The [initial runtime slice](quality/reviews/
 
 ## Implementation preparation
 
+- [Container packaging review](quality/reviews/0003-container-images.md): separate runtime images, lifecycle checks, and limitations.
+
 - [Startup configuration review](quality/reviews/0002-startup-configuration.md): shared validation, safe startup failures, and local test evidence.
 
 - [Roadmap](roadmap.md): phased deliverables and acceptance gates.
@@ -23,6 +25,8 @@ The repository is entering phase 1. The [initial runtime slice](quality/reviews/
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [API and worker images](operations/container-images.md): Docker-only build/run commands and developer packaging checks.
 
 - [Local lifecycle](operations/local-environment.md): bootstrap, readiness, persistence, and explicit reset.
 - [Observability](operations/observability.md): trace links, metrics, and disclosure policy.

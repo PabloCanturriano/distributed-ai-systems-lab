@@ -1,6 +1,6 @@
 # Local environment and lifecycle
 
-Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Compose, dependency readiness, role bootstrap, and the Docker-only journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
+Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Separate [API/worker images](container-images.md) now support a Docker-only process-lifecycle check. Compose, dependency readiness, role bootstrap, and the complete Docker-only ticket journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
 
 ## Intended startup
 

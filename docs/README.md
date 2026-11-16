@@ -14,6 +14,8 @@ The repository is entering phase 1. The [initial runtime slice](quality/reviews/
 
 ## Implementation preparation
 
+- [Startup configuration review](quality/reviews/0002-startup-configuration.md): shared validation, safe startup failures, and local test evidence.
+
 - [Roadmap](roadmap.md): phased deliverables and acceptance gates.
 - [Repository conventions](architecture/repository.md): layout, module boundaries, migrations, and review.
 - [Runtime limits](architecture/runtime-limits.md): proposed finite budgets and timing values.

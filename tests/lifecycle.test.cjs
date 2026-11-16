@@ -22,6 +22,7 @@ test('liveness responds while uninitialized readiness fails closed', async () =>
 test('idle worker starts and shuts down on SIGTERM without an HTTP listener', async () => {
   const child = spawn(process.execPath, ['apps/worker/dist/main.js'], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, APP_MODE: 'local' },
   });
   const exit = once(child, 'exit');
   const lines = createInterface({ input: child.stdout });

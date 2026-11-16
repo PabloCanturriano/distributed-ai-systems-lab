@@ -1,6 +1,6 @@
 # Repository structure and engineering conventions
 
-Status: the API and worker workspaces now exist with minimal lifecycle entry points and strict TypeScript tooling. The remaining layout is proposed; see [runtime review evidence](../quality/reviews/0001-runtime-foundation.md).
+Status: the API and worker workspaces now exist with minimal lifecycle entry points and strict TypeScript tooling. The shared `packages/configuration` workspace now has both API and worker consumers. The remaining layout is proposed; see [runtime review evidence](../quality/reviews/0001-runtime-foundation.md).
 
 ## Layout
 

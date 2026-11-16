@@ -1,3 +1,4 @@
+import { loadWorkerConfiguration } from '@lab/configuration';
 import 'reflect-metadata';
 import { Injectable, Module, OnApplicationShutdown } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -16,6 +17,7 @@ class IdleLifetime implements OnApplicationShutdown {
 class WorkerModule {}
 
 async function main(): Promise<void> {
+  loadWorkerConfiguration(process.env);
   const app = await NestFactory.createApplicationContext(WorkerModule, {
     logger: false,
   });

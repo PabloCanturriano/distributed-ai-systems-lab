@@ -1,9 +1,11 @@
+import { loadApiConfiguration } from '@lab/configuration';
 import { createApi } from './app';
 
 async function main(): Promise<void> {
+  const configuration = loadApiConfiguration(process.env);
   const app = await createApi();
   app.enableShutdownHooks();
-  await app.listen(3000, '127.0.0.1');
+  await app.listen(configuration.port, configuration.host);
   console.log(JSON.stringify({ event: 'api_listening', ready: false }));
 }
 

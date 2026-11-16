@@ -1,6 +1,6 @@
 # Local environment and lifecycle
 
-Status: operational design. Compose, images, startup commands, ports, and readiness checks are not implemented or verified yet.
+Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Compose, dependency readiness, role bootstrap, and the Docker-only journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
 
 ## Intended startup
 
@@ -27,6 +27,26 @@ Worker readiness checks database/schema plus the dependencies for its selected r
 
 Worker roles need not expose HTTP ports: use a role-local health command or internal probe. Readiness failure alone must not delete jobs or reset offsets. Liveness must not produce restart loops during a recoverable dependency outage.
 
+## Implemented local startup settings
+
+The shared `@lab/configuration` workspace validates settings before creating either Nest application. Validation uses [Zod safe parsing](https://zod.dev/basics); raw validation errors and environment values are not exposed. Unsupported settings fail startup with exit code 1 and a fixed role-specific failure event.
+
+| Variable | Applies to | Default | Accepted values |
+| --- | --- | --- | --- |
+| `APP_MODE` | API and worker | `local` | Exactly `local`; blank or unsupported modes fail |
+| `API_HOST` | API | `127.0.0.1` | `127.0.0.1`, `::1`, or explicit `0.0.0.0` |
+| `API_PORT` | API | `3000` | Canonical decimal integer from 1 through 65535 |
+
+Use loopback for host development. `0.0.0.0` is an explicit bind for future container networking and exposes the listener on every IPv4 interface when used directly on the host; local mode does not provide a network access boundary. Hostnames and other IP addresses are unsupported in this slice. Port values with whitespace, leading zeros, signs, fractions, or exponent notation fail rather than falling back to defaults.
+
+After `npm ci --ignore-scripts` and `npm run build`, this POSIX shell command starts the development API on loopback port 3001:
+
+```sh
+APP_MODE=local API_HOST=127.0.0.1 API_PORT=3001 npm run start --workspace=@lab/api
+```
+
+Settings come from the process environment; no `.env` file loader is installed. Unrelated environment variables are ignored, and the worker does not validate API-only settings. Database, broker, Redis, AI, and telemetry configuration remain future work. Readiness continues to return 503 until real bootstrap/dependency checks exist.
+
 ## Configuration groups
 
 | Group | Examples of required values | Policy |
@@ -39,7 +59,7 @@ Worker roles need not expose HTTP ports: use a role-local health command or inte
 | Telemetry | internal OTLP destination, safe resource attributes | Bounded queues; exporter failure does not block business commits |
 | Bootstrap | credential volume location and fixture manifest digest | Existing secrets and immutable data are preserved |
 
-Exact environment variable names and ports are supplied with the reviewed Compose patch. Fail before readiness when required settings conflict; do not silently choose another tenant, model, or database. Real-provider secrets remain uncommitted. The planned standard limits are in [runtime limits](../architecture/runtime-limits.md).
+The table above defines the implemented startup variables; remaining dependency settings and container publication are supplied with the reviewed Compose patch. Fail before readiness when required settings conflict; do not silently choose another tenant, model, or database. Real-provider secrets remain uncommitted. The planned standard limits are in [runtime limits](../architecture/runtime-limits.md).
 
 ## Stop, restart, and reset
 

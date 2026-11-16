@@ -1,6 +1,6 @@
 # Repository structure and engineering conventions
 
-Status: proposed layout. Apart from current Markdown documentation, these paths are not scaffolded.
+Status: the API and worker workspaces now exist with minimal lifecycle entry points and strict TypeScript tooling. The remaining layout is proposed; see [runtime review evidence](../quality/reviews/0001-runtime-foundation.md).
 
 ## Layout
 

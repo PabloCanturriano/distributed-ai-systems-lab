@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in design phase. All application behavior is proposed unless an implemented revision and verification result are explicitly linked. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is entering phase 1. The [initial runtime slice](quality/reviews/0001-runtime-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 

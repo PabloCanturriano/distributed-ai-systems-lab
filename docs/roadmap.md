@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: architecture baseline accepted on 2026-11-16; phase 1 is in preparation. No application acceptance scenario has passed yet.
+Status: architecture baseline accepted on 2026-11-16; the [initial phase-1 runtime slice](quality/reviews/0001-runtime-foundation.md) is prepared for review. No full application acceptance scenario has passed yet.
 
 ## Phase 0: architecture review
 

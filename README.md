@@ -4,9 +4,9 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Foundation phase, in preparation.** This repository currently contains the architecture proposal, contracts, ADRs, threat model, and implementation/verification plans. There is no runnable application, Docker environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
+**Foundation phase, initial tooling slice prepared for review.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. There is no ticket workflow, Docker environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
 
-All application behavior below is planned, not an implementation claim.
+The ticket-processing behavior below remains planned. See [foundation review evidence](docs/quality/reviews/0001-runtime-foundation.md) for the implemented subset and local development commands.
 
 ## Use case
 

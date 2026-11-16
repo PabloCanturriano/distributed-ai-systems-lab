@@ -1,6 +1,6 @@
 # Test strategy and acceptance evidence
 
-Status: planned. No test runner, test files, containers, or passing application results exist yet.
+Status: Jest lifecycle tests now cover the minimal API and idle worker. See [runtime review evidence](reviews/0001-runtime-foundation.md) for actual commands and results. Database, broker, business acceptance, and container scenarios remain not run.
 
 ## Development loop
 

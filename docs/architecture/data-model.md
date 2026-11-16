@@ -16,6 +16,7 @@ Tenant-bearing relationships include tenant identity in composite foreign keys. 
 | --- | --- | --- |
 | `tenants` | `id`, `name`, `created_at` | Primary key `id` |
 | `principals` | `id`, `tenant_id`, `role`, `disabled_at` | Tenant FK; unique `(tenant_id, id)`; roles resolve to server-owned permissions |
+| `auth_credentials` | `id`, `principal_id`, `secret_digest`, `created_at`, `expires_at`, `revoked_at` | Principal FK; unique credential lookup ID; no raw bearer secret; provisioning and revocation follow the [security design](security.md) |
 | `tickets` | `id`, `tenant_id`, `created_by`, `message`, `current_generation`, `created_at`, `updated_at` | Unique `(tenant_id, id)`; creator belongs to tenant; message meets validated length bounds |
 | `ticket_executions` | `tenant_id`, `ticket_id`, `generation`, `status`, `scheduling_reason`, `requested_by`, `correlation_id`, `scheduling_event_id`, timestamps | Primary key `(tenant_id, ticket_id, generation)`; tenant-consistent ticket and requester FKs; unique scheduling event ID |
 | `idempotency_records` | `tenant_id`, `operation`, `resource_scope`, `key`, `request_hash`, `ticket_id`, `generation`, `receipt`, `created_at` | Unique `(tenant_id, operation, resource_scope, key)`; tenant-consistent execution FK; immutable successful receipt |
@@ -135,4 +136,4 @@ Model retention is a local-demo simplification. Production retention, privacy de
 - DATA-09: repeated failure-finalization and relay recovery do not duplicate logical terminal effects.
 - DATA-10: after ambiguous commit acknowledgement, retry observes committed state without fabricating another claim or effect.
 
-These are future integration tests using real PostgreSQL. Exact column types, migrations, ownership predicates, bounded result sizes, and deadlock handling must be reviewed with the implementation patch. Authentication provisioning and threat analysis are the next design work; application scaffolding remains gated.
+These are future integration tests using real PostgreSQL. Exact column types, migrations, ownership predicates, bounded result sizes, and deadlock handling must be reviewed with the implementation patch. Authentication provisioning and threat analysis are specified in the [security proposal](security.md); application scaffolding remains gated.

@@ -25,6 +25,24 @@ The API and worker are the two application services. Consumer, executor, and rel
 
 A shared PostgreSQL database deliberately simplifies local operation. Modules own their writes through explicit operations; this is not independent microservice data ownership. Redis is never the sole store for deduplication, authorization, or execution leases.
 
+## System flow
+
+```mermaid
+flowchart LR
+    CLI[CLI] --> API[API]
+    API --> DB[(PostgreSQL)]
+    DB --> Relay[Outbox relay]
+    Relay --> Kafka[Kafka]
+    Kafka --> Consumer[Consumer]
+    Consumer --> DB
+    DB --> Executor[Executor]
+    Executor --> AI[Bounded model and tools]
+    Executor --> DB
+    API --> Redis[(Redis limiter)]
+```
+
+Consumer, executor, and relay are roles of the worker application. Retrieval uses the same PostgreSQL instance. Telemetry paths are described separately in the observability design.
+
 ## Main flow
 
 1. The API authenticates a tenant member and validates the submission and idempotency key.
@@ -84,8 +102,10 @@ The implementation must provide reproducible checks for:
 
 These are future acceptance criteria, not passing test results.
 
-## Remaining design work
+## Architecture review
 
-Before application scaffolding, review the HTTP/event contracts, relational constraints and indexes, threat model, and focused ADRs. Resolve database tooling, Kafka client, runtime versions, lease/retry parameters, local authentication, retrieval baseline, evaluation thresholds, telemetry viewer, and resource requirements.
+The [documentation map](../README.md) links the detailed contracts, relational model, threat model, AI/tool design, CLI, runtime limits, and focused ADRs. The [review checklist](review.md) records the owner approval gate.
 
-Approving this overview approves the design direction only. Implementation remains gated on the remaining architecture review.
+Library/profile/runtime choices are proposed in those documents. Exact dependency pins, SQL, compatibility, privileges, and resource measurements require implementation evidence rather than assumed success. Optional real-provider selection remains scoped to its feature.
+
+Approving this overview alone does not authorize scaffolding. The owner must review the complete architecture and explicitly authorize implementation; non-documentation commits still require exact-patch approval.

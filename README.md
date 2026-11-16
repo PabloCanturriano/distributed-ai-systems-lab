@@ -4,7 +4,7 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Design phase.** This repository currently contains project scope and contribution guidelines. There is no runnable application, Docker environment, or CI pipeline yet. The architecture will be reviewed before implementation starts.
+**Design phase.** This repository currently contains the architecture proposal, contracts, ADRs, threat model, and implementation/verification plans. There is no runnable application, Docker environment, or CI pipeline yet. The architecture will be reviewed before implementation starts.
 
 All behavior below is planned, not an implementation claim.
 
@@ -28,7 +28,7 @@ The proposed design uses two application services: a NestJS API and a worker. Th
 | Docker Compose | Reproducible local environment |
 | OpenTelemetry | Traces and metrics across HTTP, events, and AI operations |
 
-PostgreSQL is the source of truth. Redis must not be required for business correctness. Detailed component boundaries, contracts, and tradeoffs will be recorded in architecture documents and ADRs before implementation.
+PostgreSQL is the source of truth. Redis must not be required for business correctness. The proposed boundaries, contracts, and tradeoffs are recorded in the [documentation map](docs/README.md) and ADRs; they remain subject to architecture approval.
 
 ## Behaviors to demonstrate
 
@@ -64,6 +64,18 @@ Startup commands and prerequisites will be added once they can be verified again
 ## Scope
 
 The initial release focuses on local execution and backend behavior. It excludes a frontend, Kubernetes, production hosting, and autonomous write-capable tools. Deployment to a hosted environment requires a separate decision.
+
+## Technical review
+
+Start with the [architecture overview](docs/architecture/overview.md), [HTTP/event contracts](docs/architecture/contracts.md), and [execution decision record](docs/adr/0001-durable-ai-execution.md). The [documentation map](docs/README.md) links the data model, security design, CLI, AI limitations, tests, and runbooks.
+
+The [roadmap](docs/roadmap.md) defines delivery phases and acceptance gates. The [review checklist](docs/architecture/review.md) makes the implementation approval boundary explicit. Application scenarios are not run yet.
+
+## Current limitations
+
+The intended default combines a scripted model with lexical vector retrieval; it is not a semantic-model benchmark. Real-provider evaluation is optional and separate. The local deployment trusts the host operator and does not provide production high availability, hosted identity, or a public deployment.
+
+See the [security policy](SECURITY.md) before reporting a concern. There is no supported application release yet.
 
 ## Contributing
 

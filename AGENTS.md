@@ -2,13 +2,15 @@
 
 These instructions apply throughout this repository.
 
-## Approval before every commit
+## Commit approval
 
-The repository owner must review and explicitly approve the exact proposed changes before each commit. Editing or preparing files does not authorize committing them.
+Documentation-only commits containing Markdown (`.md`) files do not require individual approval. The owner has authorized agents to prepare, validate, and commit these changes autonomously. Keep them focused and report what changed and how it was checked.
 
-Before requesting approval, provide the purpose, affected files, full diff or complete new-file contents, validation results and limitations, and proposed commit message. Include untracked files in the review material.
+This exception applies to documentation content, not executable code or configuration stored in Markdown. Commits containing application code, tests, dependencies, runtime configuration, or other non-documentation changes require the owner's explicit approval of the exact patch before committing.
 
-If the patch changes after approval, obtain approval for the revised patch. Commit approval does not authorize a push, merge, or release. Do not amend commits or rewrite history without explicit authorization.
+For changes requiring approval, provide the purpose, affected files, full diff or complete new-file contents, validation results and limitations, and proposed commit message. Include untracked files. If the patch changes after approval, obtain approval for the revised patch.
+
+Commit authorization does not authorize a push, merge, or release. Do not amend commits or rewrite history without explicit authorization.
 
 ## Design gate
 

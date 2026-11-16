@@ -19,6 +19,23 @@ A pull request should explain:
 
 Use concrete examples when they make correctness easier to assess. Avoid claims about guarantees or performance without supporting evidence.
 
+## Test-driven development
+
+For business behavior and reliability guarantees, use a short red-green-refactor cycle:
+
+1. Select one agreed acceptance scenario and express its observable outcome as a test.
+2. Run it and confirm it fails for the expected missing behavior, rather than an environment or setup error.
+3. Implement the smallest change that satisfies the behavior.
+4. Refactor while the relevant tests remain green.
+
+Work one behavior at a time rather than writing a speculative suite for the entire system. Prefer tests through stable application boundaries; do not assert private methods or mirror implementation details. Use real PostgreSQL and Kafka integration tests when the guarantee depends on transactions, constraints, offsets, or delivery. Use deterministic model and tool doubles for reproducible execution tests; evaluate real-model quality separately.
+
+Concurrency and recovery tests must coordinate explicit checkpoints and use bounded waits. Avoid relying on arbitrary sleeps. Clock control is appropriate for application timing tests, while lease integration tests must exercise the database-time rules used in production code.
+
+Keep the failing-test step local. Each implementation commit should include its tests and finish with relevant checks passing. Document what failed before implementation and what passed afterward in the review evidence; separate red and green commits are not required.
+
+During the design phase, define acceptance scenarios only. Executable tests and test infrastructure remain subject to the architecture approval gate. TDD is not required for documentation, generated artifacts, or configuration changes that have no meaningful behavioral test.
+
 ## Validation expectations
 
 Match verification to the risk of the change:

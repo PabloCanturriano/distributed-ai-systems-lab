@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+*.patch
+# Existing design documents retain their current formatting.
+docs/adr/
+docs/architecture/
+docs/operations/
+docs/quality/ci-release.md
+docs/quality/testing.md
+docs/roadmap.md
+docs/README.md
+AGENTS.md
+CONTRIBUTING.md
+SECURITY.md
+README.md

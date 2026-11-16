@@ -1,0 +1,25 @@
+{
+  "name": "distributed-ai-systems-lab",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24.22.3 <25"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run build && jest --runInBand",
+    "check": "npm run format:check && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "jest": "30.5.2",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3"
+  }
+}

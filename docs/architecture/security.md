@@ -106,4 +106,4 @@ These are future tests and inspection checks, not evidence of passing controls:
 - SEC-13: Compose inspection confirms loopback publication and no default host ports for internal dependencies.
 - SEC-14: runtime database roles cannot perform migration/admin actions or unauthorized module writes.
 
-Execution budgets, rate-limit values, credential file permissions on supported platforms, and automated secret scanning remain implementation-review items. Ingestion and tool contracts must preserve these trust boundaries. Security design approval alone does not authorize application scaffolding.
+Proposed execution budgets and rate limits are defined in [runtime limits](runtime-limits.md). Credential file permissions on supported platforms and automated secret scanning require implementation evidence. Ingestion and tool contracts must preserve these trust boundaries. Security design approval alone does not authorize application scaffolding.

@@ -18,11 +18,11 @@ Tenant-bearing relationships include tenant identity in composite foreign keys. 
 | `principals` | `id`, `tenant_id`, `role`, `disabled_at` | Tenant FK; unique `(tenant_id, id)`; roles resolve to server-owned permissions |
 | `auth_credentials` | `id`, `principal_id`, `secret_digest`, `created_at`, `expires_at`, `revoked_at` | Principal FK; unique credential lookup ID; no raw bearer secret; provisioning and revocation follow the [security design](security.md) |
 | `tickets` | `id`, `tenant_id`, `created_by`, `message`, `current_generation`, `created_at`, `updated_at` | Unique `(tenant_id, id)`; creator belongs to tenant; message meets validated length bounds |
-| `ticket_executions` | `tenant_id`, `ticket_id`, `generation`, `status`, `scheduling_reason`, `requested_by`, `correlation_id`, `scheduling_event_id`, timestamps | Primary key `(tenant_id, ticket_id, generation)`; tenant-consistent ticket and requester FKs; unique scheduling event ID |
+| `ticket_executions` | `tenant_id`, `ticket_id`, `generation`, `status`, `scheduling_reason`, `requested_by`, `correlation_id`, `scheduling_event_id`, pinned corpus/profile/policy/provider references, timestamps | Primary key `(tenant_id, ticket_id, generation)`; tenant-consistent ticket and requester FKs; unique scheduling event ID |
 | `idempotency_records` | `tenant_id`, `operation`, `resource_scope`, `key`, `request_hash`, `ticket_id`, `generation`, `receipt`, `created_at` | Unique `(tenant_id, operation, resource_scope, key)`; tenant-consistent execution FK; immutable successful receipt |
 | `outbox_events` | `event_id`, `tenant_id`, `ticket_id`, `generation`, `type`, `version`, `payload`, `payload_digest`, `created_at`, publication fields | Primary key `event_id`; execution FK; payload bounded by event contract; immutable event content |
 | `consumer_inbox` | `consumer_name`, `event_id`, `payload_digest`, `tenant_id`, `ticket_id`, `generation`, `disposition`, `received_at` | Unique `(consumer_name, event_id)`; execution FK for admitted ticket events; disposition is scheduled, duplicate-generation, or stale |
-| `execution_jobs` | `id`, `tenant_id`, `ticket_id`, `generation`, `status`, `available_at`, `attempt_count`, `max_attempts`, lease fields | Unique `(ticket_id, generation)`; execution FK; nonnegative count and positive maximum; one current ownership token |
+| `execution_jobs` | `id`, `tenant_id`, `ticket_id`, `generation`, `status`, `available_at`, `attempt_count`, `max_attempts`, admitted `source_event_id`, lease fields | Unique `(ticket_id, generation)`; execution FK; nonnegative count and positive maximum; one current ownership token |
 | `execution_attempts` | `id`, `job_id`, `attempt_number`, `status`, `started_at`, `finished_at`, `failure_code` | Unique `(job_id, attempt_number)`; attempt ID is the ownership token; records are preserved after lease expiry |
 | `execution_results` | execution key, `outcome`, `answer`, `provider_mode`, safe execution summary, `created_at` | One result per execution; execution FK; bounded content and allowed outcomes |
 | `result_citations` | execution key, citation position, `tenant_id`, `document_id`, `document_version`, `chunk_id` | Unique position per result; same-tenant result and chunk FKs; no dangling version references |
@@ -40,9 +40,12 @@ Jobs retain terminal states. Repeated scheduling cannot create a replacement mer
 | `documents` | Tenant-owned logical document identity; unique `(tenant_id, id)` |
 | `document_versions` | Immutable source snapshot, content digest, and ingestion metadata; unique `(tenant_id, document_id, version)` |
 | `document_chunks` | Immutable chunk content and position; FK to document version; unique position within that version and a tenant-consistent chunk identity |
+| `corpus_snapshots` | Tenant-owned immutable manifest identity/digest; unique `(tenant_id, id)` |
+| `corpus_snapshot_documents` | Same-tenant snapshot membership referencing immutable document versions; unique snapshot/document/version |
+| `tenant_corpus_profiles` | Active snapshot/retrieval profile per tenant; only validated ready snapshots can be selected |
 | `chunk_embeddings` | Chunk identity, embedding profile, vector, and creation time; unique chunk/profile pair |
 
-An embedding profile identifies model, dimension, preprocessing version, and distance configuration. Never compare embeddings from incompatible profiles. Dimensions, vector indexing, chunking, and active-corpus selection remain part of the retrieval design. A simulated provider must not be presented as a meaningful semantic retrieval benchmark.
+An embedding profile identifies model, dimension, preprocessing version, and distance configuration. Never compare embeddings from incompatible profiles. The [AI design](ai-system.md) defines offline dimensions/chunking, exact retrieval, and active-corpus selection; a real embedding profile requires a compatible dimensional storage path. A simulated provider must not be presented as a meaningful semantic retrieval benchmark.
 
 A result cites immutable versions, not whatever text is currently active. Referenced versions cannot be hard-deleted while results depend on them. Creating an answered result and at least one valid citation is an application transaction invariant; an ordinary row-level constraint alone does not prove that a child citation exists. Test this boundary explicitly. Abstention stores no citations.
 
@@ -71,7 +74,7 @@ Unknown or future executions and tenant mismatches are quarantined. A valid olde
 
 Candidate discovery does not establish ownership. In a short transaction, lock the ticket before the execution/job, recheck eligibility, and claim only a current-generation available job or an expired lease. Use one consistent lock order for all operations touching these rows.
 
-Each claim increments the durable attempt count and inserts a new attempt token. Lease fields include `attempt_id` and `lease_expires_at`; a running job must have both, and a non-running job must have neither. `attempt_count` cannot exceed its stored maximum. An expired attempt consumes its budget even if it never persisted an error.
+Each claim increments the durable attempt count and inserts a new attempt token. Reclaiming an expired lease also closes the previous attempt as expired in that transaction. Lease fields include `attempt_id` and `lease_expires_at`; a running job must have both, and a non-running job must have neither. `attempt_count` cannot exceed its stored maximum. An expired attempt consumes its budget even if it never persisted an error.
 
 Renewal requires current generation, attempt token, running state, and an unexpired lease checked with database time. A late heartbeat cannot resurrect ownership. External calls occur after the claim transaction commits.
 
@@ -83,7 +86,7 @@ A stale worker gets a rejected ownership result and must discard its response ra
 
 A retryable failure from the current attempt finishes the attempt, clears the lease, sets future eligibility, and returns the execution to queued in one transaction. A permanent failure or budget exhaustion instead marks job/execution failed and creates a sanitized failure notification in the outbox.
 
-Recovery handles expired jobs with the same lock order. If the attempt budget is already exhausted, it closes the expired attempt and performs terminal failure atomically instead of starting another call. Failure-finalization must be safe to repeat, producing one terminal notification per execution. Use a unique logical notification identity `(ticket_id, generation, type)` in addition to event ID for the two currently defined event types.
+Recovery handles expired jobs with the same lock order. If the attempt budget is already exhausted, it closes the expired attempt and performs terminal failure atomically instead of starting another call. Failure-finalization must be safe to repeat, producing one terminal notification per execution. Use a unique logical notification identity `(ticket_id, generation, type)` for terminal failure notifications. Scheduling events may have distinct repair identities; the scoped repair receipt prevents duplicate repairs without forbidding an explicit replacement delivery.
 
 A database outage cannot be recorded reliably as an attempt result during the outage. On recovery, inspect committed lease and attempt state; do not assume a failed client response proves a rollback. Never acknowledge unpersisted event handling or fabricate a successful result.
 
@@ -119,7 +122,7 @@ Use targeted indexes for pending/running work rather than scanning historical te
 
 No automated business-data retention or hard deletion is included in the local demo. Preserve idempotency receipts, inbox records, terminal jobs, execution history, and referenced documents so duplicate handling and citations remain explainable. A full explicit demo reset removes related data consistently.
 
-Quarantine stores digests and safe metadata by default, not unbounded raw messages. It is an inspection record, not an automatic replay source. Correct an invalid producer and use an authorized recovery workflow; operational recovery of a quarantined current-generation event needs its own contract before implementation.
+Quarantine stores digests and safe metadata by default, not unbounded raw messages. It is an inspection record, not an automatic replay source. Correct an invalid producer and use an authorized recovery workflow; authorized same-generation recovery follows the [delivery-repair contract](../operations/recovery.md).
 
 Model retention is a local-demo simplification. Production retention, privacy deletion, storage growth limits, and restricted diagnostic payload storage require separate decisions.
 

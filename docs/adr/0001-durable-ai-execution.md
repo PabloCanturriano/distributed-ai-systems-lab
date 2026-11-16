@@ -70,7 +70,7 @@ The design adds jobs, leases, heartbeat logic, and a recovery loop. Tests must c
 
 Per-ticket partitioning does not establish total ordering across topics or prevent stale attempts. Generation checks and conditional writes remain necessary. A worker may continue an already-started external call after losing its lease; read-only tools limit side effects but do not eliminate cost or data exposure risks.
 
-Lease duration, heartbeat interval, attempt limits, quarantine schema, event validation, and replay authorization require specification before implementation. These details belong in the contracts, data model, and security review rather than being implicit defaults.
+Proposed [runtime limits](../architecture/runtime-limits.md), [contracts](../architecture/contracts.md), [data model](../architecture/data-model.md), and [security boundaries](../architecture/security.md) make leases, budgets, quarantine, and replay explicit. They still require implementation and integration evidence.
 
 ## Verification required
 

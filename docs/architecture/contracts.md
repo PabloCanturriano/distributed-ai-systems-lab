@@ -4,7 +4,7 @@ Status: proposed. Examples and acceptance scenarios are specifications, not impl
 
 ## Common HTTP rules
 
-Business routes use `/v1`, JSON, and bearer authentication. Credentials resolve to server-owned tenant membership and permissions. The client cannot select a tenant through a header or body field. Local credential provisioning remains part of the security design.
+Business routes use `/v1`, JSON, and bearer authentication. Credentials resolve to server-owned tenant membership and permissions. The client cannot select a tenant through a header or body field. Local credential provisioning is defined in the [security proposal](security.md).
 
 IDs are UUID strings. Timestamps use UTC ISO 8601 strings. Generations are positive integers starting at 1. Request objects reject unknown properties. JSON mutation bodies are limited to 16 KiB; unsupported content types return `415`, oversized bodies `413`, and malformed or invalid input `400`.
 
@@ -76,7 +76,7 @@ State-dependent fields:
 
 A result has `outcome` (`answered` or `insufficient_evidence`), `answer` (string), `citations` (array), and `execution` (summary). Each citation has `documentId`, `documentVersion`, and `chunkId`; references must resolve to the ticket tenant's stored corpus version. An `answered` result requires at least one valid citation. Abstention uses `insufficient_evidence`, an explanatory answer, and an empty citation array; it is a successful completion, not an infrastructure failure.
 
-The execution summary contains `providerMode` (`simulated` or `real`), `attemptCount`, and `toolCalls` with only tool name and outcome (`succeeded` or `failed`). It excludes arguments, raw outputs, prompts, and internal exceptions. Summary sizes must be bounded by execution budgets defined before implementation.
+The execution summary contains `providerMode` (`simulated` or `real`), `attemptCount`, and `toolCalls` with only tool name and outcome (`succeeded` or `failed`). It excludes arguments, raw outputs, prompts, and internal exceptions. Summary sizes follow the proposed [runtime budgets](runtime-limits.md).
 
 A failure has an allowlisted `code` and safe `message`. Initial codes are `EXECUTION_FAILED` and `ATTEMPTS_EXHAUSTED`. Provider errors, credentials, SQL, stack traces, and document excerpts are never copied into it. Generation history, ticket lists, streaming, and cancellation endpoints are outside this first contract.
 
@@ -145,9 +145,9 @@ Before scheduling, the consumer loads authoritative ticket state and checks tena
 
 Invalid events are durably quarantined using topic, partition, and offset as the source identity, plus a payload digest and safe reason. Raw content is not exposed through business APIs or default logs. A consumer commits only contiguous offsets whose handling is durable; inability to persist quarantine blocks acknowledgement and raises operational telemetry.
 
-Execution failure emits a separate outbox notification to `tickets.execution-failed.v1`, type `ticket.execution.failed`, version `1`. It uses the same identity envelope, ticket generation, and ticket partition key, with `data` containing only `failureCode` and `attemptCount`. Its correlation comes from the scheduling operation and its causation is the scheduling event ID. It is not consumed as a scheduling command; there is no automatic failure-topic-to-replay loop.
+Execution failure emits a separate outbox notification to `tickets.execution-failed.v1`, type `ticket.execution.failed`, version `1`. It uses the same identity envelope, ticket generation, and ticket partition key, with `data` containing only `failureCode` and `attemptCount`. Its correlation comes from the scheduling operation and its causation is the event ID recorded by the job at admission, including an explicitly repaired delivery. It is not consumed as a scheduling command; there is no automatic failure-topic-to-replay loop.
 
-Kafka publication failure cannot erase the failed ticket: its state and pending failure notification are committed together. Full quarantine retention, authorized operational inspection, and replay controls belong in the data and security design before implementation.
+Kafka publication failure cannot erase the failed ticket: its state and pending failure notification are committed together. Quarantine retention follows the [data model](data-model.md); authorized inspection and same-generation delivery repair follow the [recovery proposal](../operations/recovery.md).
 
 ## Acceptance specifications for TDD
 
@@ -172,4 +172,4 @@ These scenarios will become executable tests after architecture approval. Each s
 | RESULT-01 | Insufficient evidence | Completed abstention with empty citations |
 | RESULT-02 | Provider exception includes a fake secret | Safe API failure and telemetry; no secret disclosure |
 
-HTTP and event contracts will become machine-readable schemas during implementation. CLI, document-ingestion, tool schemas, and operational inspection contracts remain separate design work. This proposal does not remove the architecture implementation gate.
+HTTP and event contracts will become machine-readable schemas during implementation. The [CLI](cli.md), [AI/tool design](ai-system.md), and [recovery procedures](../operations/recovery.md) specify their separate boundaries. This proposal does not remove the architecture implementation gate.

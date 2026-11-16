@@ -1,0 +1,138 @@
+# Relational model and transaction boundaries
+
+Status: proposed. This is a logical design, not executable migrations or a verified schema. Read with the [overview](overview.md), [contracts](contracts.md), and [execution ADR](../adr/0001-durable-ai-execution.md).
+
+## Conventions and ownership
+
+Use UUID identifiers, UTC timestamps, explicit foreign keys, named uniqueness constraints, and bounded text/JSON fields. Timestamps involved in execution ownership come from the database, not worker clocks. Generation and attempt numbers are positive integers. Avoid database enums until migration tradeoffs are reviewed; statuses must still have explicit allowed-value constraints.
+
+The API owns submission, replay, and reads. The consumer owns inbox admission and initial job scheduling. The executor owns attempts and results. The relay owns publication tracking. These are module boundaries within a shared database, not independent services with separate storage.
+
+Tenant-bearing relationships include tenant identity in composite foreign keys. A globally unique UUID alone does not enforce tenant consistency. Tenant filters and authorization remain mandatory even with these constraints; database row-level security is a separate decision.
+
+## Logical tables
+
+| Table | Essential fields | Integrity rules |
+| --- | --- | --- |
+| `tenants` | `id`, `name`, `created_at` | Primary key `id` |
+| `principals` | `id`, `tenant_id`, `role`, `disabled_at` | Tenant FK; unique `(tenant_id, id)`; roles resolve to server-owned permissions |
+| `tickets` | `id`, `tenant_id`, `created_by`, `message`, `current_generation`, `created_at`, `updated_at` | Unique `(tenant_id, id)`; creator belongs to tenant; message meets validated length bounds |
+| `ticket_executions` | `tenant_id`, `ticket_id`, `generation`, `status`, `scheduling_reason`, `requested_by`, `correlation_id`, `scheduling_event_id`, timestamps | Primary key `(tenant_id, ticket_id, generation)`; tenant-consistent ticket and requester FKs; unique scheduling event ID |
+| `idempotency_records` | `tenant_id`, `operation`, `resource_scope`, `key`, `request_hash`, `ticket_id`, `generation`, `receipt`, `created_at` | Unique `(tenant_id, operation, resource_scope, key)`; tenant-consistent execution FK; immutable successful receipt |
+| `outbox_events` | `event_id`, `tenant_id`, `ticket_id`, `generation`, `type`, `version`, `payload`, `payload_digest`, `created_at`, publication fields | Primary key `event_id`; execution FK; payload bounded by event contract; immutable event content |
+| `consumer_inbox` | `consumer_name`, `event_id`, `payload_digest`, `tenant_id`, `ticket_id`, `generation`, `disposition`, `received_at` | Unique `(consumer_name, event_id)`; execution FK for admitted ticket events; disposition is scheduled, duplicate-generation, or stale |
+| `execution_jobs` | `id`, `tenant_id`, `ticket_id`, `generation`, `status`, `available_at`, `attempt_count`, `max_attempts`, lease fields | Unique `(ticket_id, generation)`; execution FK; nonnegative count and positive maximum; one current ownership token |
+| `execution_attempts` | `id`, `job_id`, `attempt_number`, `status`, `started_at`, `finished_at`, `failure_code` | Unique `(job_id, attempt_number)`; attempt ID is the ownership token; records are preserved after lease expiry |
+| `execution_results` | execution key, `outcome`, `answer`, `provider_mode`, safe execution summary, `created_at` | One result per execution; execution FK; bounded content and allowed outcomes |
+| `result_citations` | execution key, citation position, `tenant_id`, `document_id`, `document_version`, `chunk_id` | Unique position per result; same-tenant result and chunk FKs; no dangling version references |
+| `event_quarantine` | `consumer_name`, `topic`, `partition`, `offset`, `payload_digest`, safe reason, `created_at` | Unique source position per consumer; no FK requiring invalid producer-supplied tenant or ticket IDs |
+| `audit_records` | `id`, `tenant_id`, `principal_id`, `ticket_id`, `generation`, `action`, `request_id`, `created_at` | Tenant-consistent principal/execution FKs; no credentials or raw model content |
+
+`ticket_executions` is the authoritative lifecycle state for each generation. `tickets.current_generation` is a pointer, not a duplicate status field. Enforce its composite relationship to an execution at transaction commit, allowing ticket and first execution creation in the same transaction. The concrete deferred-constraint migration must be verified with integration tests before adoption.
+
+Jobs retain terminal states. Repeated scheduling cannot create a replacement merely because the original job completed. Results and earlier generations remain available internally even though the initial public GET exposes only the current generation.
+
+## Documents and citations
+
+| Table | Responsibility and constraints |
+| --- | --- |
+| `documents` | Tenant-owned logical document identity; unique `(tenant_id, id)` |
+| `document_versions` | Immutable source snapshot, content digest, and ingestion metadata; unique `(tenant_id, document_id, version)` |
+| `document_chunks` | Immutable chunk content and position; FK to document version; unique position within that version and a tenant-consistent chunk identity |
+| `chunk_embeddings` | Chunk identity, embedding profile, vector, and creation time; unique chunk/profile pair |
+
+An embedding profile identifies model, dimension, preprocessing version, and distance configuration. Never compare embeddings from incompatible profiles. Dimensions, vector indexing, chunking, and active-corpus selection remain part of the retrieval design. A simulated provider must not be presented as a meaningful semantic retrieval benchmark.
+
+A result cites immutable versions, not whatever text is currently active. Referenced versions cannot be hard-deleted while results depend on them. Creating an answered result and at least one valid citation is an application transaction invariant; an ordinary row-level constraint alone does not prove that a child citation exists. Test this boundary explicitly. Abstention stores no citations.
+
+## Transaction protocols
+
+### Submission
+
+1. Validate/authenticate and derive tenant scope before mutation.
+2. Reserve the unique idempotency identity inside the same transaction as the ticket; no committed pending placeholder is exposed.
+3. Create ticket, generation 1 execution, immutable receipt, and scheduling outbox record.
+4. Commit all or none. On uniqueness contention, obtain the winning receipt in a valid transaction and compare its hash.
+
+A rolled-back winner does not reserve the key. A lost HTTP response does not justify creating a second ticket. Canonicalization and receipt behavior follow the HTTP contract.
+
+### Event admission
+
+1. Validate the envelope and digest; quarantine invalid input durably without trusting its tenant fields.
+2. Resolve the authoritative tenant/ticket/execution and serialize against replay using the ticket lock.
+3. Check inbox identity and digest; a changed payload with an existing event ID is quarantined by source position.
+4. Record disposition and insert a job if the generation is current and no job exists.
+5. Commit before advancing the partition's contiguous durable offset.
+
+Unknown or future executions and tenant mismatches are quarantined. A valid older generation is recorded as stale. A second valid event for a current execution with an existing job records duplicate-generation disposition. No network acknowledgement occurs inside a database transaction.
+
+### Claim, renew, and complete
+
+Candidate discovery does not establish ownership. In a short transaction, lock the ticket before the execution/job, recheck eligibility, and claim only a current-generation available job or an expired lease. Use one consistent lock order for all operations touching these rows.
+
+Each claim increments the durable attempt count and inserts a new attempt token. Lease fields include `attempt_id` and `lease_expires_at`; a running job must have both, and a non-running job must have neither. `attempt_count` cannot exceed its stored maximum. An expired attempt consumes its budget even if it never persisted an error.
+
+Renewal requires current generation, attempt token, running state, and an unexpired lease checked with database time. A late heartbeat cannot resurrect ownership. External calls occur after the claim transaction commits.
+
+Completion locks the same authoritative rows and checks the current generation, token, running state, and unexpired lease at the conditional write. It writes result/citations, finishes the attempt/job, and updates execution status together. Lease validity is checked when ownership is validated under lock, not claimed as a real-time guarantee about the eventual commit timestamp. A competing claim cannot take ownership through these locks during the transaction.
+
+A stale worker gets a rejected ownership result and must discard its response rather than retrying persistence with a new token. It may still have incurred an external call or charge.
+
+### Retry and terminal failure
+
+A retryable failure from the current attempt finishes the attempt, clears the lease, sets future eligibility, and returns the execution to queued in one transaction. A permanent failure or budget exhaustion instead marks job/execution failed and creates a sanitized failure notification in the outbox.
+
+Recovery handles expired jobs with the same lock order. If the attempt budget is already exhausted, it closes the expired attempt and performs terminal failure atomically instead of starting another call. Failure-finalization must be safe to repeat, producing one terminal notification per execution. Use a unique logical notification identity `(ticket_id, generation, type)` in addition to event ID for the two currently defined event types.
+
+A database outage cannot be recorded reliably as an attempt result during the outage. On recovery, inspect committed lease and attempt state; do not assume a failed client response proves a rollback. Never acknowledge unpersisted event handling or fabricate a successful result.
+
+### Replay
+
+After authorization and tenant lookup, check a matching idempotency receipt first. For a new key, lock the ticket, verify failed state at the expected generation, and create the next execution, receipt, audit record, and scheduling outbox record while advancing the pointer atomically.
+
+Competing replay keys serialize on the ticket and one conflicts on expected generation. Old jobs cannot update the current execution through a stale worker. Preserve their final records and do not recycle attempt tokens or event IDs.
+
+### Outbox publication
+
+Claim a bounded batch with a publication token and lease in a short transaction. Publish outside the transaction. Mark a row published only if broker acknowledgement was received and the claim token still matches. Expired claims are reclaimable; an old relay cannot mark a newer claim completed.
+
+Outbox rows have publication eligibility, claim expiry, attempt count, last safe error, and published timestamp. An outage leaves them pending with bounded retry delay. Batch concurrency may reorder publication; partition keys alone do not recover original transaction order. Current scheduling logic therefore relies on generation checks, not assumed relay order.
+
+## Initial access paths
+
+Index design must be validated against the actual queries and seeded workload; these are intended access paths, not performance claims:
+
+- Tenant-scoped ticket lookup and current execution lookup through unique keys.
+- Idempotency lookup through its scoped uniqueness key.
+- Inbox lookup through consumer/event identity.
+- Eligible queued jobs ordered by availability and ID, with bounded batch size.
+- Expired running jobs ordered by lease expiry and ID.
+- Pending outbox rows ordered by eligibility and ID; separately locate expired publication claims.
+- Attempts by job and attempt number; audit records by tenant/ticket and creation time.
+- Quarantine inspection by reason and creation time; source-position uniqueness prevents repeated records.
+- Chunks/embeddings by tenant, immutable version, and embedding profile before retrieval indexing is selected.
+
+Use targeted indexes for pending/running work rather than scanning historical terminal rows. Record query plans during integration work before adding broader indexes or claiming throughput.
+
+## Retention and reset
+
+No automated business-data retention or hard deletion is included in the local demo. Preserve idempotency receipts, inbox records, terminal jobs, execution history, and referenced documents so duplicate handling and citations remain explainable. A full explicit demo reset removes related data consistently.
+
+Quarantine stores digests and safe metadata by default, not unbounded raw messages. It is an inspection record, not an automatic replay source. Correct an invalid producer and use an authorized recovery workflow; operational recovery of a quarantined current-generation event needs its own contract before implementation.
+
+Model retention is a local-demo simplification. Production retention, privacy deletion, storage growth limits, and restricted diagnostic payload storage require separate decisions.
+
+## TDD acceptance additions
+
+- DATA-01: rollback at each submission write leaves no partial ticket, receipt, or event.
+- DATA-02: cross-tenant composite references are rejected by constraints.
+- DATA-03: concurrent claims yield one active attempt token for a job.
+- DATA-04: expired ownership cannot renew or persist results; a new attempt can finish.
+- DATA-05: retries and crashed attempts exhaust the stored budget without another external call after exhaustion.
+- DATA-06: a completion rollback leaves no partial result, citations, or completed status.
+- DATA-07: replay and stale admission/completion races preserve one current generation.
+- DATA-08: a referenced document version cannot disappear while a result cites it.
+- DATA-09: repeated failure-finalization and relay recovery do not duplicate logical terminal effects.
+- DATA-10: after ambiguous commit acknowledgement, retry observes committed state without fabricating another claim or effect.
+
+These are future integration tests using real PostgreSQL. Exact column types, migrations, ownership predicates, bounded result sizes, and deadlock handling must be reviewed with the implementation patch. Authentication provisioning and threat analysis are the next design work; application scaffolding remains gated.

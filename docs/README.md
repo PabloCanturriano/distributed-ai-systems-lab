@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is entering phase 1. The [initial runtime slice](quality/reviews/0001-runtime-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. The [database identity foundation](quality/reviews/0004-database-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -14,6 +14,8 @@ The repository is entering phase 1. The [initial runtime slice](quality/reviews/
 
 ## Implementation preparation
 
+- [Database foundation review](quality/reviews/0004-database-foundation.md): role/schema bootstrap, identity migration, integration checks, and unresolved tool findings.
+
 - [Container packaging review](quality/reviews/0003-container-images.md): separate runtime images, lifecycle checks, and limitations.
 
 - [Startup configuration review](quality/reviews/0002-startup-configuration.md): shared validation, safe startup failures, and local test evidence.
@@ -25,6 +27,8 @@ The repository is entering phase 1. The [initial runtime slice](quality/reviews/
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [Database identity foundation](operations/database-foundation.md): initialization boundaries and real PostgreSQL verification.
 
 - [API and worker images](operations/container-images.md): Docker-only build/run commands and developer packaging checks.
 

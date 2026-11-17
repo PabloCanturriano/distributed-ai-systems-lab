@@ -4,24 +4,27 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "database"
   ],
   "engines": {
     "node": ">=24.22.3 <25"
   },
   "scripts": {
-    "build": "npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker",
+    "build": "npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/database",
     "typecheck": "npm run build --workspace=@lab/configuration && npm run typecheck --workspaces",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "npm run build && jest --runInBand",
     "check": "npm run format:check && npm run typecheck && npm test",
-    "test:containers": "node scripts/container-smoke.mjs"
+    "test:containers": "node scripts/container-smoke.mjs",
+    "test:database": "npm run build --workspace=@lab/database && node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.database.config.cjs --runInBand"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "jest": "30.5.2",
     "prettier": "3.10.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "@testcontainers/postgresql": "12.2.1"
   }
 }

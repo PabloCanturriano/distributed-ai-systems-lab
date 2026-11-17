@@ -120,7 +120,7 @@ try {
       const fs = require('node:fs');
       assert.ok(process.getuid() > 0);
       require('@lab/configuration');
-      for (const path of ['.git', '.env', 'tests', 'node_modules/jest', 'node_modules/typescript', 'apps/${role}/src', 'apps/${absentRole}/dist']) {
+      for (const path of ['.git', '.env', 'tests', 'node_modules/jest', 'node_modules/typescript', 'node_modules/node-pg-migrate', 'database', 'apps/${role}/src', 'apps/${absentRole}/dist']) {
         assert.equal(fs.existsSync(path), false, path + ' must be absent');
       }
     `,

@@ -4,7 +4,7 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Foundation phase, initial tooling slice prepared for review.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. API and worker [container images](docs/operations/container-images.md) are prepared for review. There is no ticket workflow, Compose environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
+**Foundation phase, in progress.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. API and worker [container images](docs/operations/container-images.md) are implemented for local lifecycle verification. A [database identity foundation](docs/operations/database-foundation.md) is prepared for review with real PostgreSQL integration checks. There is no ticket workflow, Compose environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
 
 The ticket-processing behavior below remains planned. See [foundation review evidence](docs/quality/reviews/0001-runtime-foundation.md) for the implemented subset and local development commands.
 

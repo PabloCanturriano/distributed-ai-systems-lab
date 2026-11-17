@@ -1,6 +1,6 @@
 # Relational model and transaction boundaries
 
-Status: proposed. This is a logical design, not executable migrations or a verified schema. Read with the [overview](overview.md), [contracts](contracts.md), and [execution ADR](../adr/0001-durable-ai-execution.md).
+Status: logical design with an implemented initial migration for tenants, principals, and credential digests. See [database evidence](../quality/reviews/0004-database-foundation.md). All remaining tables and transaction protocols below are proposed. Read with the [overview](overview.md), [contracts](contracts.md), and [execution ADR](../adr/0001-durable-ai-execution.md).
 
 ## Conventions and ownership
 

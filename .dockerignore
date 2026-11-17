@@ -20,3 +20,5 @@
 !packages/configuration/tsconfig.json
 !packages/configuration/src/
 !packages/configuration/src/**
+!database/
+!database/package.json

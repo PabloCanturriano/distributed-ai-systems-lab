@@ -1,6 +1,6 @@
 # Local authentication and threat model
 
-Status: proposed. Controls and tests below are design requirements, not implemented protections or a production security certification. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
+Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups and identity-table grants are implemented; persistent identities, authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
 
 ## Scope and assumptions
 

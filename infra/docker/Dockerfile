@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/configuration/package.json packages/configuration/package.json
+COPY database/package.json database/package.json
 
 FROM manifests AS build
 RUN npm ci --ignore-scripts --no-audit --no-fund
@@ -15,7 +16,7 @@ COPY apps/worker/tsconfig.json apps/worker/tsconfig.json
 COPY apps/worker/src apps/worker/src
 COPY packages/configuration/tsconfig.json packages/configuration/tsconfig.json
 COPY packages/configuration/src packages/configuration/src
-RUN npm run build
+RUN npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker
 
 FROM manifests AS api-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api

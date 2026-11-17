@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. The [database identity foundation](quality/reviews/0004-database-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. The database identity foundation is committed; [persistent fictional identities](quality/reviews/0005-local-identities.md) are prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -13,6 +13,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 7. [Architecture review checklist](architecture/review.md): proposed decisions and implementation gate.
 
 ## Implementation preparation
+
+- [Local identity review](quality/reviews/0005-local-identities.md): durable private credentials, immutable fixture checks, concurrency, and recovery evidence.
 
 - [Database foundation review](quality/reviews/0004-database-foundation.md): role/schema bootstrap, identity migration, integration checks, and unresolved tool findings.
 
@@ -27,6 +29,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [Persistent fictional identities](operations/local-identities.md): file/database protocol, aliases, and failure behavior.
 
 - [Database identity foundation](operations/database-foundation.md): initialization boundaries and real PostgreSQL verification.
 

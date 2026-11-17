@@ -47,3 +47,8 @@ export async function migrateDatabase(
   });
   return applied.length;
 }
+
+export {
+  seedDemoIdentities,
+  type IdentitySeedResult,
+} from './seed-identities.js';

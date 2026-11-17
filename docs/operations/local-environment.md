@@ -1,6 +1,6 @@
 # Local environment and lifecycle
 
-Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Separate [API/worker images](container-images.md) now support a Docker-only process-lifecycle check. A [database bootstrap and identity migration](database-foundation.md) now have isolated integration evidence. Compose, persistent credential provisioning, dependency readiness, and the complete Docker-only ticket journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
+Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Separate [API/worker images](container-images.md) now support a Docker-only process-lifecycle check. A [database bootstrap and identity migration](database-foundation.md) now have isolated integration evidence. The [trusted identity seed operation](local-identities.md) persists fictional credentials with retry checks. Compose wiring, persistent database-login provisioning, dependency readiness, and the complete Docker-only ticket journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
 
 ## Intended startup
 

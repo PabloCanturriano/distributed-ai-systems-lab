@@ -6,3 +6,7 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+# Raw local identity files and incomplete private writes must never be committed.
+identities-v1.json
+.identity-*.tmp

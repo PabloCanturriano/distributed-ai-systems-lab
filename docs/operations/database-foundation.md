@@ -1,6 +1,6 @@
 # Database identity foundation
 
-Status: the first bootstrap and ordered identity migration are implemented for isolated integration verification. Application connections, persistent credentials, tenant/demo provisioning, Compose, and usable application readiness are not implemented yet.
+Status: the first bootstrap and ordered identity migration are implemented for isolated integration verification. A [trusted seed operation](local-identities.md) now provisions versioned fictional identities and private credential files. Application connections, persistent database logins, Compose, and usable application readiness are not implemented yet.
 
 ## Responsibilities
 
@@ -15,6 +15,8 @@ Bootstrap is intended only for a dedicated lab cluster/database: role names are 
 
 ## Initial schema and permissions
 
+An additive migration now also creates `lab.seed_manifests`, readable/insertable only by the seed role and owned by the migrator, to bind versioned identity fixtures to credential material.
+
 The migration creates `lab.tenants`, `lab.principals`, and `lab.auth_credentials`, plus runner-managed `lab.schema_migrations`. It enforces UUID keys, tenant membership, reader/requester/operator roles, bounded tenant names, 32-byte credential digests, and valid optional credential expiry. Raw bearer secrets are not stored.
 
 | Role                      | Current privileges                                                       |
@@ -24,7 +26,7 @@ The migration creates `lab.tenants`, `lab.principals`, and `lab.auth_credentials
 | `lab_api`                 | Select identity rows; cannot write them or migrate                       |
 | `lab_worker`, `lab_relay` | Schema usage, no identity-table access                                   |
 
-These are non-login privilege roles without inheritance, superuser, database creation, role creation, replication, bypass-RLS, or parent-role memberships. Later provisioning must create separately scoped authenticated connections. No persistent login/password, bearer credential, seed manifest, or identity is created by this slice. The fictional rows and random connection passwords used in tests disappear with that test's database.
+These are non-login privilege roles without inheritance, superuser, database creation, role creation, replication, bypass-RLS, or parent-role memberships. Later provisioning must create separately scoped authenticated connections. Database login/password provisioning remains future work. The separate trusted identity seed operation can persist raw secret material in an operator-supplied private directory. Integration tests use temporary directories and isolated databases, which are removed with each run.
 
 Future ticket-processing migrations will grant only the permissions each operation needs. This schema does not implement ticket tenancy, authentication, credential verification, or row-level security. Destructive down migration is deliberately unsupported; use an explicitly reviewed forward migration.
 

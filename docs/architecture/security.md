@@ -1,6 +1,6 @@
 # Local authentication and threat model
 
-Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups and identity-table grants are implemented; persistent identities, authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
+Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. Database login provisioning, authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
 
 ## Scope and assumptions
 
@@ -25,6 +25,8 @@ Tenant-level visibility is intentional; individual ticket ownership isolation is
 A credential consists of a non-secret lookup ID and a cryptographically generated secret with at least 256 bits of randomness. Persist only a digest of the high-entropy secret and its principal association. Verification must use appropriate constant-time comparison. Never use human passwords or predictable public demo strings as bearer secrets.
 
 The seed/bootstrap process creates credentials on first initialization and writes the raw local demo credentials to a dedicated shared volume. Only bootstrap and the CLI mount that volume; the API resolves credential digests through PostgreSQL. Existing local data must not silently generate replacement credentials on every startup. A missing credential volume with an existing database is a provisioning error requiring explicit recovery or reset.
+
+The trusted seed operation now persists six fictional identities and private raw secret material, with file/database consistency checks. Compose credential-volume wiring and HTTP/CLI use remain unimplemented; see the [implemented provisioning protocol](../operations/local-identities.md).
 
 The CLI selects an identity by a non-secret alias, reads its credential from the volume, and injects the bearer header. Do not pass secrets in CLI arguments, URLs, or committed files. Manual HTTP examples can describe local credential retrieval without printing credentials during normal startup. The default interactive demo uses a requester; replay scenarios explicitly select an operator.
 

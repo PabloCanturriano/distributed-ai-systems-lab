@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(1);
+  expect(applied).toBe(2);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -94,6 +94,7 @@ test('clean install applies the identity migration as the non-superuser owner', 
     'auth_credentials',
     'principals',
     'schema_migrations',
+    'seed_manifests',
     'tenants',
   ]);
 });
@@ -116,7 +117,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(1);
+  ).toBe(2);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -248,11 +249,11 @@ test('a failing pending batch rolls back both schema changes and migration histo
   try {
     await cp('database/migrations', dir, { recursive: true });
     await writeFile(
-      join(dir, '1794787200001_checkpoint.cjs'),
+      join(dir, '1794787200020_checkpoint.cjs'),
       "exports.up = pgm => pgm.sql('CREATE TABLE lab.rollback_checkpoint(id int)');",
     );
     await writeFile(
-      join(dir, '1794787200002_failure.cjs'),
+      join(dir, '1794787200021_failure.cjs'),
       "exports.up = pgm => pgm.sql('SELECT missing_column FROM lab.tenants');",
     );
     await expect(migrateDatabase(migrator, dir)).rejects.toBeDefined();
@@ -269,7 +270,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(1);
+    ).toBe(2);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -291,5 +292,441 @@ test('bootstrap rejects a pre-existing elevated role without rewriting it', asyn
     ).toBe(true);
   } finally {
     await admin.query('ALTER ROLE lab_relay NOLOGIN');
+  }
+});
+
+test('identity provisioning has an immutable database manifest anchor', async () => {
+  const { rows } = await migrator.query(
+    "SELECT to_regclass('lab.seed_manifests') IS NOT NULL AS present",
+  );
+  expect(rows[0].present).toBe(true);
+});
+
+describe('durable local identity provisioning', () => {
+  const {
+    mkdtemp,
+    readFile,
+    writeFile,
+    unlink,
+    chmod,
+    stat,
+    rm,
+  } = require('node:fs/promises');
+  const { tmpdir } = require('node:os');
+  const { join } = require('node:path');
+  const { createHash } = require('node:crypto');
+  const tenants = [
+    'a1000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000002',
+  ];
+  let directory;
+  let seed;
+  let provision;
+  const filename = () => join(directory, 'identities-v1.json');
+  async function fileHash() {
+    return createHash('sha256')
+      .update(await readFile(filename()))
+      .digest('hex');
+  }
+  async function readTestManifest() {
+    try {
+      return JSON.parse(await readFile(filename(), 'utf8'));
+    } catch {
+      throw new Error('Test identity manifest could not be parsed');
+    }
+  }
+  async function counts() {
+    const { rows } = await admin.query(
+      `SELECT
+      (SELECT count(*)::int FROM lab.tenants WHERE id=ANY($1::uuid[])) AS tenants,
+      (SELECT count(*)::int FROM lab.principals WHERE tenant_id=ANY($1::uuid[])) AS principals,
+      (SELECT count(*)::int FROM lab.auth_credentials c JOIN lab.principals p ON p.id=c.principal_id WHERE p.tenant_id=ANY($1::uuid[])) AS credentials`,
+      [tenants],
+    );
+    return rows[0];
+  }
+  beforeEach(async () => {
+    ({ seedDemoIdentities: provision } =
+      await import('../../database/dist/index.js'));
+    directory = await mkdtemp(join(tmpdir(), 'lab-private-identities-'));
+    seed = await connectAs('lab_seed');
+  });
+  afterEach(async () => {
+    try {
+      await seed?.end();
+    } finally {
+      try {
+        await admin.query(
+          'DELETE FROM lab.auth_credentials WHERE principal_id IN (SELECT id FROM lab.principals WHERE tenant_id=ANY($1::uuid[]))',
+          [tenants],
+        );
+        await admin.query(
+          'DELETE FROM lab.principals WHERE tenant_id=ANY($1::uuid[])',
+          [tenants],
+        );
+        await admin.query('DELETE FROM lab.tenants WHERE id=ANY($1::uuid[])', [
+          tenants,
+        ]);
+        await admin.query(
+          "DELETE FROM lab.seed_manifests WHERE name='identities-v1'",
+        );
+      } finally {
+        if (directory) await rm(directory, { recursive: true, force: true });
+      }
+    }
+  });
+
+  test('creates two tenants and six private credentials, storing only secret digests in PostgreSQL', async () => {
+    const result = await provision(seed, directory);
+    expect(result).toEqual({
+      status: 'created',
+      fixtureVersion: 'identities-v1',
+    });
+    expect(await counts()).toEqual({
+      tenants: 2,
+      principals: 6,
+      credentials: 6,
+    });
+    expect((await stat(directory)).mode & 0o777).toBe(0o700);
+    expect((await stat(filename())).mode & 0o777).toBe(0o600);
+    const manifest = await readTestManifest();
+    expect(new Set(manifest.credentials.map((c) => c.lookupId)).size).toBe(6);
+    expect(new Set(manifest.credentials.map((c) => c.secret)).size).toBe(6);
+    const databaseRows = (
+      await admin.query(
+        'SELECT id,secret_digest FROM lab.auth_credentials WHERE principal_id IN (SELECT id FROM lab.principals WHERE tenant_id=ANY($1::uuid[]))',
+        [tenants],
+      )
+    ).rows;
+    for (const credential of manifest.credentials) {
+      const bytes = Buffer.from(credential.secret, 'base64url');
+      expect(bytes.length).toBe(32);
+      const digest = createHash('sha256').update(bytes).digest('hex');
+      const stored = databaseRows.find((r) => r.id === credential.lookupId);
+      expect(stored.secret_digest.toString('hex')).toBe(digest);
+      expect(JSON.stringify(result).includes(credential.secret)).toBe(false);
+      expect(JSON.stringify(databaseRows).includes(credential.secret)).toBe(
+        false,
+      );
+    }
+    await expect(
+      seed.query('DELETE FROM lab.seed_manifests'),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  test('repeated startup preserves credentials and honors revoked/disabled identities', async () => {
+    await provision(seed, directory);
+    const before = await fileHash();
+    await admin.query(
+      'UPDATE lab.principals SET disabled_at=CURRENT_TIMESTAMP WHERE tenant_id=ANY($1::uuid[])',
+      [tenants],
+    );
+    await admin.query(
+      'UPDATE lab.auth_credentials SET revoked_at=CURRENT_TIMESTAMP WHERE principal_id IN (SELECT id FROM lab.principals WHERE tenant_id=ANY($1::uuid[]))',
+      [tenants],
+    );
+    expect(await provision(seed, directory)).toEqual({
+      status: 'unchanged',
+      fixtureVersion: 'identities-v1',
+    });
+    expect(await fileHash()).toBe(before);
+    expect(await counts()).toEqual({
+      tenants: 2,
+      principals: 6,
+      credentials: 6,
+    });
+    expect(
+      (
+        await admin.query(
+          'SELECT count(*)::int AS count FROM lab.principals WHERE tenant_id=ANY($1::uuid[]) AND disabled_at IS NOT NULL',
+          [tenants],
+        )
+      ).rows[0].count,
+    ).toBe(6);
+    expect(
+      (
+        await admin.query(
+          'SELECT count(*)::int AS count FROM lab.auth_credentials c JOIN lab.principals p ON p.id=c.principal_id WHERE p.tenant_id=ANY($1::uuid[]) AND c.revoked_at IS NOT NULL',
+          [tenants],
+        )
+      ).rows[0].count,
+    ).toBe(6);
+  });
+
+  test('concurrent initializers produce one committed manifest and no duplicate identities', async () => {
+    const second = await connectAs('lab_seed');
+    try {
+      const blocker = await connectAs('lab_seed');
+      const pids = [
+        (await seed.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,
+        (await second.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,
+      ];
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT pg_advisory_xact_lock(41017, 2)');
+      const pending = Promise.allSettled([
+        provision(seed, directory),
+        provision(second, directory),
+      ]);
+      let waiting = 0;
+      try {
+        const deadline = performance.now() + 2000;
+        while (performance.now() < deadline) {
+          waiting = (
+            await admin.query(
+              "SELECT count(*)::int AS count FROM pg_locks WHERE locktype='advisory' AND NOT granted AND pid=ANY($1::int[])",
+              [pids],
+            )
+          ).rows[0].count;
+          if (waiting === 2) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      } finally {
+        await blocker.query('COMMIT');
+        await blocker.end();
+      }
+      const settled = await pending;
+      expect(waiting).toBe(2);
+      expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+      expect(settled.map((r) => r.value.status).sort()).toEqual([
+        'created',
+        'unchanged',
+      ]);
+      expect(await counts()).toEqual({
+        tenants: 2,
+        principals: 6,
+        credentials: 6,
+      });
+      expect(
+        (
+          await admin.query(
+            "SELECT count(*)::int AS count FROM lab.seed_manifests WHERE name='identities-v1'",
+          )
+        ).rows[0].count,
+      ).toBe(1);
+    } finally {
+      await second.end();
+    }
+  });
+
+  test('missing credential file after commit fails without replacing existing identities', async () => {
+    await provision(seed, directory);
+    const before = (
+      await admin.query('SELECT credentials_digest FROM lab.seed_manifests')
+    ).rows[0].credentials_digest.toString('hex');
+    await unlink(filename());
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity manifest missing',
+    );
+    await expect(stat(filename())).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await counts()).toEqual({
+      tenants: 2,
+      principals: 6,
+      credentials: 6,
+    });
+    expect(
+      (
+        await admin.query('SELECT credentials_digest FROM lab.seed_manifests')
+      ).rows[0].credentials_digest.toString('hex'),
+    ).toBe(before);
+  });
+
+  test('changed secret material is rejected without updating database digests', async () => {
+    await provision(seed, directory);
+    const before = (
+      await admin.query('SELECT credentials_digest FROM lab.seed_manifests')
+    ).rows[0].credentials_digest.toString('hex');
+    const manifest = await readTestManifest();
+    manifest.credentials[0].secret = randomBytes(32).toString('base64url');
+    await writeFile(filename(), JSON.stringify(manifest));
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity manifest changed',
+    );
+    expect(
+      (
+        await admin.query('SELECT credentials_digest FROM lab.seed_manifests')
+      ).rows[0].credentials_digest.toString('hex'),
+    ).toBe(before);
+  });
+
+  test('corrupt manifests fail with a generic message without echoing their contents', async () => {
+    await writeFile(filename(), 'fictional-sensitive-invalid-json', {
+      mode: 0o600,
+    });
+    await expect(provision(seed, directory)).rejects.toThrow(
+      /^Invalid identity manifest$/,
+    );
+    expect(await counts()).toEqual({
+      tenants: 0,
+      principals: 0,
+      credentials: 0,
+    });
+  });
+
+  test('unsafe directory or file permissions are rejected', async () => {
+    await chmod(directory, 0o755);
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity directory must be private',
+    );
+    await chmod(directory, 0o700);
+    await provision(seed, directory);
+    await chmod(filename(), 0o644);
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity manifest must be a small private regular file',
+    );
+  });
+
+  test('changed fixture facts are detected rather than overwritten', async () => {
+    await provision(seed, directory);
+    await admin.query(
+      "UPDATE lab.tenants SET name='Changed fictional name' WHERE id=$1",
+      [tenants[0]],
+    );
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity fixture changed',
+    );
+    expect(
+      (
+        await admin.query('SELECT name FROM lab.tenants WHERE id=$1', [
+          tenants[0],
+        ])
+      ).rows[0].name,
+    ).toBe('Changed fictional name');
+  });
+
+  test('file publication survives a failed seed transaction and retry reuses the same credentials', async () => {
+    await admin.query(
+      "CREATE FUNCTION lab.reject_seed() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fictional seed failure'; END $$; CREATE TRIGGER reject_seed BEFORE INSERT ON lab.principals FOR EACH ROW EXECUTE FUNCTION lab.reject_seed()",
+    );
+    let before;
+    try {
+      await expect(provision(seed, directory)).rejects.toThrow(
+        /^Identity provisioning failed$/,
+      );
+      before = await fileHash();
+      expect(await counts()).toEqual({
+        tenants: 0,
+        principals: 0,
+        credentials: 0,
+      });
+      expect(
+        (
+          await admin.query(
+            "SELECT count(*)::int AS count FROM lab.seed_manifests WHERE name='identities-v1'",
+          )
+        ).rows[0].count,
+      ).toBe(0);
+    } finally {
+      await admin.query(
+        'DROP TRIGGER reject_seed ON lab.principals; DROP FUNCTION lab.reject_seed()',
+      );
+    }
+    expect((await provision(seed, directory)).status).toBe('created');
+    expect(await fileHash()).toBe(before);
+    expect(await counts()).toEqual({
+      tenants: 2,
+      principals: 6,
+      credentials: 6,
+    });
+  });
+
+  test('missing credential directory for an initialized database is not recreated', async () => {
+    await provision(seed, directory);
+    await rm(directory, { recursive: true });
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity manifest missing',
+    );
+    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await counts()).toEqual({
+      tenants: 2,
+      principals: 6,
+      credentials: 6,
+    });
+  });
+
+  test('symbolic links and oversized manifests are rejected before database writes', async () => {
+    const { symlink } = require('node:fs/promises');
+    const target = join(directory, 'private-target.json');
+    await writeFile(target, '{}', { mode: 0o600 });
+    await symlink(target, filename());
+    await expect(provision(seed, directory)).rejects.toThrow(
+      /^Identity provisioning failed$/,
+    );
+    await unlink(filename());
+    await writeFile(filename(), 'x'.repeat(16385), { mode: 0o600 });
+    await expect(provision(seed, directory)).rejects.toThrow(
+      'Identity manifest must be a small private regular file',
+    );
+    expect(await counts()).toEqual({
+      tenants: 0,
+      principals: 0,
+      credentials: 0,
+    });
+  });
+
+  test('a new private directory under an existing parent can be initialized and reused', async () => {
+    const target = join(directory, 'credentials');
+    expect((await provision(seed, target)).status).toBe('created');
+    expect((await stat(target)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(target, 'identities-v1.json'))).mode & 0o777).toBe(
+      0o600,
+    );
+    expect((await provision(seed, target)).status).toBe('unchanged');
+  });
+
+  test('a non-seed identity cannot provision credentials', async () => {
+    await expect(provision(migrator, directory)).rejects.toThrow(
+      'Identity seed role required',
+    );
+    await expect(stat(filename())).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
+test('upgrading the previous identity schema adds seed state without changing existing data', async () => {
+  const { mkdtemp, copyFile, rm } = require('node:fs/promises');
+  const { tmpdir } = require('node:os');
+  const { join } = require('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'lab-prior-migration-'));
+  let upgrade;
+  let created = false;
+  try {
+    await copyFile(
+      'database/migrations/1794787200000_identity-foundation.cjs',
+      join(directory, '1794787200000_identity-foundation.cjs'),
+    );
+    await admin.query('CREATE DATABASE lab_upgrade_test');
+    created = true;
+    upgrade = new Client({
+      host: container.getHost(),
+      port: container.getPort(),
+      database: 'lab_upgrade_test',
+      user: container.getUsername(),
+      password: container.getPassword(),
+      connectionTimeoutMillis: 5000,
+      statement_timeout: 10000,
+    });
+    await upgrade.connect();
+    await bootstrapDatabase(upgrade);
+    // Upgrade-only fixture; role security is exercised with authenticated non-admin sessions above.
+    await upgrade.query('SET ROLE lab_migrator');
+    expect(await migrateDatabase(upgrade, directory)).toBe(1);
+    await upgrade.query(
+      "INSERT INTO lab.tenants(id,name) VALUES('90000000-0000-4000-8000-000000000001','Fictional upgrade fixture')",
+    );
+    expect(await migrateDatabase(upgrade)).toBe(1);
+    expect(await migrateDatabase(upgrade)).toBe(0);
+    expect((await upgrade.query('SELECT name FROM lab.tenants')).rows).toEqual([
+      { name: 'Fictional upgrade fixture' },
+    ]);
+    expect(
+      (
+        await upgrade.query(
+          'SELECT count(*)::int AS count FROM lab.seed_manifests',
+        )
+      ).rows[0].count,
+    ).toBe(0);
+  } finally {
+    await upgrade?.end();
+    if (created) await admin.query('DROP DATABASE lab_upgrade_test');
+    await rm(directory, { recursive: true, force: true });
   }
 });

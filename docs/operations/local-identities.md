@@ -1,6 +1,6 @@
 # Persistent fictional identities
 
-Status: trusted identity seeding is implemented and verified against PostgreSQL 17.12 and macOS private files. Compose wiring, database login provisioning, credential-volume mounts, the CLI, and HTTP authentication remain future work.
+Status: trusted identity seeding is implemented and verified against PostgreSQL 17.12 and macOS private files. The [Compose foundation](compose-foundation.md) now wires database login provisioning and private credential volumes. The CLI and HTTP authentication remain future work.
 
 ## Provisioning operation
 
@@ -10,7 +10,7 @@ The immutable `identities-v1` fixture contains two fictional tenants, Harbor Sup
 
 Each raw secret is encoded as canonical base64url in `identities-v1.json`. PostgreSQL stores only SHA-256 of the decoded 32 secret bytes, the lookup UUID, and principal association. A separate `lab.seed_manifests` row binds the fixture digest and the canonical credential-manifest digest to this database. The file is not a complete HTTP bearer wire format; that contract and CLI assembly are not implemented yet.
 
-The trusted parent directory must already exist. The credential directory must be owned by the process user and deny group/other access. Newly created directories use mode 0700; credential files must be regular files owned by that user with mode 0600 and at most 16 KiB. The manifest and its leaf directory must not be symbolic links. Parent paths and the host operator are trusted. Future bootstrap/CLI containers must use compatible file ownership; cross-platform named-volume behavior is not established by host filesystem tests. Windows provisioning is unsupported by this POSIX permission implementation.
+The trusted parent directory must already exist. The credential directory must be owned by the process user and deny group/other access. Newly created directories use mode 0700; credential files must be regular files owned by that user with mode 0600 and at most 16 KiB. The manifest and its leaf directory must not be symbolic links. Parent paths and the host operator are trusted. Compose initialization verifies compatible UID-1000 ownership on Docker Desktop Linux named volumes. The future CLI must use the same ownership policy; other volume backends/platforms remain unverified. Windows provisioning is unsupported by this POSIX permission implementation.
 
 ## Initialization and recovery protocol
 

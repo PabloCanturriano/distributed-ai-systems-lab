@@ -1,6 +1,6 @@
 # Local authentication and threat model
 
-Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. Database login provisioning, authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
+Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. The [Compose foundation](../operations/compose-foundation.md) now provisions restricted database logins and private password volumes. Authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
 
 ## Scope and assumptions
 

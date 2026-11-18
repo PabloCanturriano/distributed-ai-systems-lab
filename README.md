@@ -4,7 +4,7 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Foundation phase, in progress.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. API and worker [container images](docs/operations/container-images.md) are implemented for local lifecycle verification. The [database identity foundation](docs/operations/database-foundation.md) has real PostgreSQL integration checks; [persistent fictional identity seeding](docs/operations/local-identities.md) is prepared for review. There is no ticket workflow, Compose environment, or CI pipeline yet. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
+**Foundation phase, in progress.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. API and worker [container images](docs/operations/container-images.md) are implemented for local lifecycle verification. The [database identity foundation](docs/operations/database-foundation.md) and [persistent fictional identities](docs/operations/local-identities.md) have real PostgreSQL integration checks. An initial [Compose foundation](docs/operations/compose-foundation.md) is prepared for review; business readiness, the ticket workflow, and CI remain unimplemented. The owner accepted the architecture baseline on 2026-11-16; the first implementation patch remains subject to review before commit.
 
 The ticket-processing behavior below remains planned. See [foundation review evidence](docs/quality/reviews/0001-runtime-foundation.md) for the implemented subset and local development commands.
 
@@ -50,7 +50,7 @@ The target is a single Docker Compose startup command, fictional seed data, and 
 
 A deterministic simulated AI provider will support repeatable workflow tests. An optional real-model integration will have separate quality evaluations; simulated results will not be presented as evidence of model quality.
 
-Startup commands and prerequisites will be added once they can be verified against a working environment.
+The [Compose foundation commands](docs/operations/compose-foundation.md) verify initialization and process lifecycle. Complete ticket-demo commands and measured prerequisites remain future work.
 
 ## Delivery sequence
 

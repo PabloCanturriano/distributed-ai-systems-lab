@@ -46,7 +46,7 @@ Match verification to the risk of the change:
 - AI behavior: distinguish deterministic workflow tests from retrieval and real-model quality evaluations. Record the dataset, configuration, and provider needed to interpret results.
 - Security boundaries: verify authorization, tenant isolation, and input validation where affected.
 
-Run the relevant automated checks once available. State which checks were not run and why. No application test commands exist at this stage.
+Run the relevant available checks and state which checks were not run and why. Current commands and boundaries are recorded in the [test strategy](docs/quality/testing.md); a passing foundation check does not establish the unimplemented ticket-workflow guarantees.
 
 Never commit credentials, private customer data, or unredacted sensitive logs. Use fictional fixtures and document required environment variables without secret values.
 

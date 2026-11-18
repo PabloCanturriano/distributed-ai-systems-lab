@@ -1,6 +1,6 @@
 # Database identity foundation
 
-Status: the first bootstrap and ordered identity migration are implemented for isolated integration verification. A [trusted seed operation](local-identities.md) now provisions versioned fictional identities and private credential files. Application connections, persistent database logins, Compose, and usable application readiness are not implemented yet.
+Status: the first bootstrap and ordered identity migration are implemented for isolated integration verification. A [trusted seed operation](local-identities.md) now provisions versioned fictional identities and private credential files. The [Compose foundation](compose-foundation.md) now provisions persistent database logins and runs initialization jobs. Application database connections and usable business readiness are not implemented yet.
 
 ## Responsibilities
 
@@ -26,7 +26,7 @@ The migration creates `lab.tenants`, `lab.principals`, and `lab.auth_credentials
 | `lab_api`                 | Select identity rows; cannot write them or migrate                       |
 | `lab_worker`, `lab_relay` | Schema usage, no identity-table access                                   |
 
-These are non-login privilege roles without inheritance, superuser, database creation, role creation, replication, bypass-RLS, or parent-role memberships. Later provisioning must create separately scoped authenticated connections. Database login/password provisioning remains future work. The separate trusted identity seed operation can persist raw secret material in an operator-supplied private directory. Integration tests use temporary directories and isolated databases, which are removed with each run.
+These are non-login privilege roles without inheritance, superuser, database creation, role creation, replication, bypass-RLS, or parent-role memberships. The Compose bootstrap now creates separately scoped non-inheriting login roles and authenticates their persisted password files. Runtime application connections remain future work. The separate trusted identity seed operation can persist raw secret material in an operator-supplied private directory. Integration tests use temporary directories and isolated databases, which are removed with each run.
 
 Future ticket-processing migrations will grant only the permissions each operation needs. This schema does not implement ticket tenancy, authentication, credential verification, or row-level security. Destructive down migration is deliberately unsupported; use an explicitly reviewed forward migration.
 

@@ -22,3 +22,17 @@
 !packages/configuration/src/**
 !database/
 !database/package.json
+!database/tsconfig.json
+!database/src/
+!database/src/**
+!database/bootstrap/
+!database/bootstrap/**
+!database/migrations/
+!database/migrations/**
+# Private state must remain excluded even beneath an allowed source directory.
+**/.env
+**/.env.*
+**/identities-v1.json
+**/.identity-*.tmp
+**/password
+**/.password-*.tmp

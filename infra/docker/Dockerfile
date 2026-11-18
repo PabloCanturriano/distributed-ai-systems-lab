@@ -49,3 +49,22 @@ COPY --from=build /app/packages/configuration/dist ./packages/configuration/dist
 COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 CMD ["node", "apps/worker/dist/main.js"]
+
+
+FROM manifests AS database-build
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY tsconfig.base.json ./
+COPY database/tsconfig.json database/tsconfig.json
+COPY database/src database/src
+RUN npm run build --workspace=@lab/database
+
+FROM manifests AS database-dependencies
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/database
+
+FROM runtime AS database
+COPY --from=database-dependencies /app/node_modules ./node_modules
+COPY --from=database-build /app/database/package.json ./database/package.json
+COPY --from=database-build /app/database/dist ./database/dist
+COPY database/bootstrap ./database/bootstrap
+COPY database/migrations ./database/migrations
+CMD ["node", "database/dist/initialize.js"]

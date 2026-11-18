@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. The database identity foundation is committed; [persistent fictional identities](quality/reviews/0005-local-identities.md) are prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the [Compose initialization foundation](quality/reviews/0006-compose-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -13,6 +13,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 7. [Architecture review checklist](architecture/review.md): proposed decisions and implementation gate.
 
 ## Implementation preparation
+
+- [Compose foundation review](quality/reviews/0006-compose-foundation.md): Docker-only initialization, restricted logins, persistent volumes, and failure gates.
 
 - [Local identity review](quality/reviews/0005-local-identities.md): durable private credentials, immutable fixture checks, concurrency, and recovery evidence.
 
@@ -29,6 +31,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [Compose database foundation](operations/compose-foundation.md): verified initialization commands, ownership, networks, and stop/restart semantics.
 
 - [Persistent fictional identities](operations/local-identities.md): file/database protocol, aliases, and failure behavior.
 

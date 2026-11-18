@@ -1,6 +1,6 @@
 # Test strategy and acceptance evidence
 
-Status: Jest lifecycle tests now cover the minimal API and idle worker. See [runtime review evidence](reviews/0001-runtime-foundation.md) for actual commands and results. Database, broker, business acceptance, and container scenarios remain not run.
+Status: fast Jest checks, real PostgreSQL integration, application image smoke, and [Compose foundation verification](reviews/0006-compose-foundation.md) are implemented. Broker integration, business acceptance, and the complete ticket workflow remain not run. Each review records actual scope and results.
 
 ## Development loop
 

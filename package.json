@@ -18,7 +18,8 @@
     "test": "npm run build && jest --runInBand",
     "check": "npm run format:check && npm run typecheck && npm test",
     "test:containers": "node scripts/container-smoke.mjs",
-    "test:database": "npm run build --workspace=@lab/database && node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.database.config.cjs --runInBand"
+    "test:database": "npm run build --workspace=@lab/database && node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.database.config.cjs --runInBand",
+    "test:compose": "node scripts/compose-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

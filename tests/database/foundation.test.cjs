@@ -730,3 +730,55 @@ test('upgrading the previous identity schema adds seed state without changing ex
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('database login provisioning preserves passwords and limits each login to its privilege group', async () => {
+  const { provisionDatabaseLogins } =
+    await import('../../database/dist/index.js');
+  const roles = ['migrator', 'seed', 'api', 'worker', 'relay'];
+  const passwords = Object.fromEntries(
+    roles.map((role) => [role, randomBytes(32).toString('base64url')]),
+  );
+  await provisionDatabaseLogins(admin, passwords);
+  await provisionDatabaseLogins(admin, passwords);
+  // Supplying different values does not rewrite an existing login's password.
+  await provisionDatabaseLogins(
+    admin,
+    Object.fromEntries(
+      roles.map((role) => [role, randomBytes(32).toString('base64url')]),
+    ),
+  );
+  for (const role of roles) {
+    const client = new Client({
+      host: container.getHost(),
+      port: container.getPort(),
+      database: container.getDatabase(),
+      user: `lab_${role}_login`,
+      password: passwords[role],
+      connectionTimeoutMillis: 5000,
+    });
+    await client.connect();
+    try {
+      await client.query(`SET ROLE lab_${role}`);
+      expect(
+        (await client.query('SELECT current_user')).rows[0].current_user,
+      ).toBe(`lab_${role}`);
+      if (role !== 'migrator')
+        await expect(
+          client.query('SET ROLE lab_migrator'),
+        ).rejects.toMatchObject({ code: '42501' });
+    } finally {
+      await client.end();
+    }
+  }
+  await admin.query('GRANT lab_migrator TO lab_api_login');
+  try {
+    await expect(provisionDatabaseLogins(admin, passwords)).rejects.toThrow(
+      'Incompatible database login membership',
+    );
+  } finally {
+    await admin.query('REVOKE lab_migrator FROM lab_api_login');
+  }
+  await expect(
+    provisionDatabaseLogins(admin, { ...passwords, api: 'invalid' }),
+  ).rejects.toThrow('Invalid database login material');
+});

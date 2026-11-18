@@ -1,0 +1,133 @@
+x-initializer: &initializer
+  build:
+    context: .
+    dockerfile: infra/docker/Dockerfile
+    target: database
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ['no-new-privileges:true']
+  restart: 'no'
+  environment:
+    APP_MODE: local
+    DB_HOST: postgres
+    DB_NAME: lab
+
+services:
+  secrets:
+    <<: *initializer
+    user: '0:0'
+    command: [node, database/dist/initialize.js, secrets]
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    network_mode: none
+    volumes:
+      - postgres_data:/var/lib/lab/postgres:ro
+      - admin_secret:/run/lab/admin
+      - migrator_secret:/run/lab/migrator
+      - seed_secret:/run/lab/seed
+      - api_secret:/run/lab/api
+      - worker_secret:/run/lab/worker
+      - relay_secret:/run/lab/relay
+      - demo_credentials:/run/lab/demo
+
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+    environment:
+      POSTGRES_USER: lab_admin
+      POSTGRES_DB: lab
+      POSTGRES_PASSWORD_FILE: /run/lab/admin/password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - admin_secret:/run/lab/admin:ro
+    networks: [backend]
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U lab_admin -d lab]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    stop_grace_period: 15s
+
+  bootstrap:
+    <<: *initializer
+    command: [node, database/dist/initialize.js, bootstrap]
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - admin_secret:/run/lab/admin:ro
+      - migrator_secret:/run/lab/migrator:ro
+      - seed_secret:/run/lab/seed:ro
+      - api_secret:/run/lab/api:ro
+      - worker_secret:/run/lab/worker:ro
+      - relay_secret:/run/lab/relay:ro
+
+  migrate:
+    <<: *initializer
+    command: [node, database/dist/initialize.js, migrate]
+    networks: [backend]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - migrator_secret:/run/lab/migrator:ro
+
+  seed:
+    <<: *initializer
+    command: [node, database/dist/initialize.js, seed]
+    networks: [backend]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - seed_secret:/run/lab/seed:ro
+      - demo_credentials:/run/lab/demo
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: api
+    ports: ['127.0.0.1:${LAB_API_PORT:-3000}:3000']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend, ingress]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    stop_grace_period: 15s
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: worker
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    stop_grace_period: 15s
+
+networks:
+  ingress: {}
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+  admin_secret:
+  migrator_secret:
+  seed_secret:
+  api_secret:
+  worker_secret:
+  relay_secret:
+  demo_credentials:

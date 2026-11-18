@@ -52,3 +52,5 @@ export {
   seedDemoIdentities,
   type IdentitySeedResult,
 } from './seed-identities.js';
+
+export { provisionDatabaseLogins } from './database-logins.js';

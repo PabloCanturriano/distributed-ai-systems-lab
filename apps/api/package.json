@@ -13,6 +13,11 @@
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "@nestjs/platform-express": "11.2.10",
-    "@lab/configuration": "0.0.0"
+    "@lab/configuration": "0.0.0",
+    "pg": "8.23.1",
+    "@redis/client": "6.3.1"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
   }
 }

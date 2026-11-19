@@ -13,7 +13,12 @@ for (const [role, setting] of [
     let failure;
     try {
       await run(process.execPath, [`apps/${role}/dist/main.js`], {
-        env: { ...process.env, APP_MODE: 'local', [setting]: secret },
+        env: {
+          ...process.env,
+          APP_MODE: 'local',
+          API_DEPENDENCIES: 'disabled',
+          [setting]: secret,
+        },
         timeout: 3000,
       });
     } catch (error) {
@@ -45,6 +50,7 @@ test('API uses its configured port and reports a safe failure when that port is 
         env: {
           ...process.env,
           APP_MODE: 'local',
+          API_DEPENDENCIES: 'disabled',
           API_HOST: '127.0.0.1',
           API_PORT: String(port),
         },

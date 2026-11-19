@@ -1,6 +1,6 @@
 # Local environment and lifecycle
 
-Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Separate [API/worker images](container-images.md) now support a Docker-only process-lifecycle check. A [database bootstrap and identity migration](database-foundation.md) now have isolated integration evidence. The [trusted identity seed operation](local-identities.md) persists fictional credentials with retry checks. The [Compose database foundation](compose-foundation.md) now wires secret preparation, database logins, migrations, and identity seeding. Business dependency readiness and the complete Docker-only ticket journey remain unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
+Status: operational design with an implemented minimal API/worker lifecycle and validated local startup settings. Separate [API/worker images](container-images.md) now support a Docker-only process-lifecycle check. A [database bootstrap and identity migration](database-foundation.md) now have isolated integration evidence. The [trusted identity seed operation](local-identities.md) persists fictional credentials with retry checks. The [Compose database foundation](compose-foundation.md) now wires secret preparation, database logins, migrations, and identity seeding. The [API dependency checks](api-readiness.md) now cover PostgreSQL/schema/identity bootstrap plus Redis reachability. The complete Docker-only ticket journey remains unimplemented. See [configuration review evidence](../quality/reviews/0002-startup-configuration.md).
 
 ## Intended startup
 
@@ -45,7 +45,7 @@ After `npm ci --ignore-scripts` and `npm run build`, this POSIX shell command st
 APP_MODE=local API_HOST=127.0.0.1 API_PORT=3001 npm run start --workspace=@lab/api
 ```
 
-Settings come from the process environment; no `.env` file loader is installed. Unrelated environment variables are ignored, and the worker does not validate API-only settings. Database, broker, Redis, AI, and telemetry configuration remain future work. Readiness continues to return 503 until real bootstrap/dependency checks exist.
+Settings come from the process environment; no `.env` file loader is installed. Unrelated environment variables are ignored, and the worker does not validate API-only settings. API-only PostgreSQL/Redis settings and the private database file policy are documented in [API readiness](api-readiness.md). Standalone disabled-dependency startup remains unready; Compose explicitly enables these checks. Broker, AI, and telemetry configuration remain future work.
 
 ## Configuration groups
 

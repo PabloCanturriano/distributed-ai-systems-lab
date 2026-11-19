@@ -1,6 +1,6 @@
 # Docker Compose database foundation
 
-Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The API still returns 503 for business readiness, and the worker remains idle. Kafka, Redis, telemetry, authenticated routes, and ticket processing are not wired yet. This command does not complete phase 1 or provide the planned ticket demo.
+Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The [API readiness adapter](api-readiness.md) now checks PostgreSQL bootstrap metadata and Redis. The worker remains idle. Kafka, telemetry, authenticated routes, rate limiting, and ticket processing are not wired yet. This command does not complete phase 1 or provide the planned ticket demo.
 
 ## Start and stop
 
@@ -39,11 +39,11 @@ The next `up` reuses passwords, identity credentials, schema history, and rows. 
 3. `bootstrap`: a non-root administrative job creates privilege groups, extension/schema, and five login roles. Each login has no inherited privileges and may select only its assigned privilege group. Existing mismatched attributes/memberships fail instead of being rewritten. Existing passwords are authenticated and never rotated automatically.
 4. `migrate`: a non-root job mounts only its own password volume, authenticates as `lab_migrator_login`, selects `lab_migrator`, and applies ordered migrations.
 5. `seed`: a non-root job mounts only its database password and writable demo-credential volume. It selects `lab_seed` and executes the [durable identity protocol](local-identities.md). Raw fictional credentials are stored under `identities/identities-v1.json` in that volume.
-6. `api` and `worker`: start only after seeding succeeds. Neither currently mounts database or demo credentials. Their future database connections require a separate patch.
+6. `api` starts after seeding and Redis health, mounts only its own database password read-only, and checks PostgreSQL plus Redis. `worker` starts after seeding and remains idle without credential mounts. Neither mounts raw demo credentials. Redis starts independently on the internal backend network with no host port or persistence.
 
 All initializer commands emit fixed completion/failure events with safe counts/status where applicable. No password is passed as a command argument, embedded in Compose environment values, or written into an image. The administrative bootstrap job can read all five login passwords to provision/verify them; those mounts are read-only. The raw demo credential volume is mounted only by trusted secret-volume preparation and seeding, with CLI access still future work.
 
-The database and jobs use the internal backend network. The API also has an ingress network so Docker can publish its loopback port; that network permits API outbound connectivity. No tenant isolation or hosted-deployment security is implied. The API image's Docker healthcheck measures liveness only; Compose `--wait` success does not mean business readiness. `/health/live` returns 200 and `/health/ready` remains 503. The worker has no readiness probe yet.
+The database and jobs use the internal backend network. The API also has an ingress network so Docker can publish its loopback port; that network permits API outbound connectivity. No tenant isolation or hosted-deployment security is implied. The API image's healthcheck uses dependency readiness in Compose, so `--wait` checks the implemented prerequisites. `/health/live` stays 200 independently of dependencies; `/health/ready` is 200 only for valid PostgreSQL bootstrap metadata plus a responsive Redis. These checks do not establish ticket processing. The worker has no readiness probe yet.
 
 ## Failure handling
 
@@ -51,7 +51,7 @@ Missing or altered database password material, incompatible roles, failed migrat
 
 The mounted secrets must retain UID/GID 1000 ownership, mode 0700 directories, and mode 0600 regular files. The trusted secret initializer changes ownership only for brand-new empty root-owned volumes. Existing incompatible volumes fail. Administrative passwords remain accessible to the trusted Docker host and initialization jobs; these local secret volumes are not a production secret manager.
 
-Compose dependencies gate startup only. They do not establish runtime reconnect, job recovery, or automatic application restart when a dependency later fails. Those behaviors remain future work.
+Compose dependencies gate startup only. The API adapter separately provides tested readiness degradation/reconnection on PostgreSQL/Redis stop or pause, without restarting the API. Job recovery, worker reconnection, and automatic application restart policies remain future work.
 
 ## Verification
 

@@ -73,3 +73,35 @@ for (const load of [loadApiConfiguration, loadWorkerConfiguration]) {
     },
   );
 }
+
+test('API dependency mode supplies explicit local endpoints without changing standalone defaults', () => {
+  expect(loadApiConfiguration({}).dependencies).toBeUndefined();
+  expect(
+    loadApiConfiguration({
+      API_DEPENDENCIES: 'local',
+      API_PG_HOST: '127.0.0.1',
+      API_PG_PORT: '5433',
+      API_REDIS_HOST: 'redis',
+      API_REDIS_PORT: '6380',
+    }).dependencies,
+  ).toEqual({
+    postgres: { host: '127.0.0.1', port: 5433 },
+    redis: { host: 'redis', port: 6380 },
+  });
+});
+test.each([
+  { API_DEPENDENCIES: 'hosted' },
+  { API_PG_PORT: '0' },
+  { API_REDIS_PORT: '65536' },
+  { API_PG_HOST: 'postgres://fictional-sensitive-value@host' },
+  { API_REDIS_HOST: '' },
+  { API_PG_HOST: '-invalid' },
+  { API_REDIS_HOST: 'invalid..host' },
+])(
+  'API rejects invalid dependency configuration without exposing values',
+  (environment) => {
+    expect(() => loadApiConfiguration(environment)).toThrow(
+      /^Invalid API configuration$/,
+    );
+  },
+);

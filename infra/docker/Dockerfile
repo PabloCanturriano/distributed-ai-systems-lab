@@ -37,8 +37,8 @@ COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 ENV API_HOST=0.0.0.0 API_PORT=3000
 EXPOSE 3000
-# Liveness only: business readiness deliberately remains 503 in this slice.
-HEALTHCHECK --interval=5s --timeout=3s --start-period=2s --retries=3 CMD ["node", "-e", "const host = process.env.API_HOST === '::1' ? '[::1]' : '127.0.0.1'; fetch('http://' + host + ':' + process.env.API_PORT + '/health/live', {signal: AbortSignal.timeout(2000)}).then(r => { if (!r.ok) process.exitCode = 1; }).catch(() => { process.exitCode = 1; });"]
+# Compose enables dependency readiness; standalone images default to liveness only.
+HEALTHCHECK --interval=5s --timeout=3s --start-period=2s --retries=3 CMD ["node", "-e", "const host = process.env.API_HOST === '::1' ? '[::1]' : '127.0.0.1'; fetch('http://' + host + ':' + process.env.API_PORT + (process.env.API_DEPENDENCIES === 'local' ? '/health/ready' : '/health/live'), {signal: AbortSignal.timeout(2000)}).then(r => { if (!r.ok) process.exitCode = 1; }).catch(() => { process.exitCode = 1; });"]
 CMD ["node", "apps/api/dist/main.js"]
 
 # Select API or worker explicitly with --target; the worker exposes no HTTP port.

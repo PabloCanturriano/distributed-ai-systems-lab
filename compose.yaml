@@ -52,6 +52,36 @@ services:
       start_period: 5s
     stop_grace_period: 15s
 
+  redis:
+    image: redis:8.10.3-trixie@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53
+    user: redis
+    command:
+      [
+        redis-server,
+        --bind,
+        0.0.0.0,
+        --protected-mode,
+        'no',
+        --save,
+        '',
+        --appendonly,
+        'no',
+        --maxmemory,
+        64mb,
+        --maxmemory-policy,
+        noeviction,
+      ]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    stop_grace_period: 15s
+
   bootstrap:
     <<: *initializer
     command: [node, database/dist/initialize.js, bootstrap]
@@ -93,6 +123,12 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: api
+    environment:
+      API_DEPENDENCIES: local
+      API_PG_HOST: postgres
+      API_REDIS_HOST: redis
+    volumes:
+      - api_secret:/run/lab/api:ro
     ports: ['127.0.0.1:${LAB_API_PORT:-3000}:3000']
     read_only: true
     cap_drop: [ALL]
@@ -101,6 +137,8 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     stop_grace_period: 15s
 
   worker:

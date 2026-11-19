@@ -33,7 +33,7 @@ docker stop --time 15 lab-api-local lab-worker-local
 
 No volume or Docker socket is mounted. The API container binds internally to `0.0.0.0:3000`; the example publishes only on host loopback. The worker publishes no port. Startup overrides use the [validated settings](local-environment.md#implemented-local-startup-settings). If changing `API_PORT`, change the container side of the port mapping too; `EXPOSE` is image metadata and does not publish a host port.
 
-The API image healthcheck calls `/health/live` using Node with a bounded request timeout. Docker's `healthy` status here means process liveness only. `/health/ready` continues to return 503. The idle worker has no healthcheck because it cannot demonstrate job-processing readiness yet. No external credentials are needed; these commands do not submit or process a ticket.
+Standalone API images default to disabled dependencies: their healthcheck calls `/health/live`, and `/health/ready` remains 503. With `API_DEPENDENCIES=local`, the healthcheck calls `/health/ready` and requires the [configured PostgreSQL/Redis prerequisites](api-readiness.md). Node probes have bounded request timeouts. The idle worker has no healthcheck because it cannot demonstrate job-processing readiness yet. No external credentials are needed; these commands do not submit or process a ticket.
 
 ## Repeatable packaging checks
 

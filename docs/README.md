@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the [Compose initialization foundation](quality/reviews/0006-compose-foundation.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the Compose foundation is committed and [API dependency readiness](quality/reviews/0007-api-readiness.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -13,6 +13,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 7. [Architecture review checklist](architecture/review.md): proposed decisions and implementation gate.
 
 ## Implementation preparation
+
+- [API readiness review](quality/reviews/0007-api-readiness.md): PostgreSQL/Redis checks, bounded outage recovery, scoped credentials, and current audit findings.
 
 - [Compose foundation review](quality/reviews/0006-compose-foundation.md): Docker-only initialization, restricted logins, persistent volumes, and failure gates.
 
@@ -31,6 +33,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [API dependency readiness](operations/api-readiness.md): health contract, local dependency settings, bounds, and recovery.
 
 - [Compose database foundation](operations/compose-foundation.md): verified initialization commands, ownership, networks, and stop/restart semantics.
 

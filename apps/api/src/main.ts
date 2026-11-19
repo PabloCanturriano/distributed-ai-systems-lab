@@ -1,11 +1,23 @@
 import { loadApiConfiguration } from '@lab/configuration';
 import { createApi } from './app';
+import { ApiDependencies } from './dependencies';
 
 async function main(): Promise<void> {
   const configuration = loadApiConfiguration(process.env);
-  const app = await createApi();
+  const dependencies = configuration.dependencies
+    ? await ApiDependencies.create(configuration.dependencies)
+    : undefined;
+  const app = await createApi(dependencies).catch(async (error: unknown) => {
+    await dependencies?.onApplicationShutdown();
+    throw error;
+  });
   app.enableShutdownHooks();
-  await app.listen(configuration.port, configuration.host);
+  try {
+    await app.listen(configuration.port, configuration.host);
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
   console.log(JSON.stringify({ event: 'api_listening', ready: false }));
 }
 

@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(2);
+  expect(applied).toBe(3);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -117,7 +117,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(2);
+  ).toBe(3);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -249,11 +249,11 @@ test('a failing pending batch rolls back both schema changes and migration histo
   try {
     await cp('database/migrations', dir, { recursive: true });
     await writeFile(
-      join(dir, '1794787200020_checkpoint.cjs'),
+      join(dir, '1794873600010_checkpoint.cjs'),
       "exports.up = pgm => pgm.sql('CREATE TABLE lab.rollback_checkpoint(id int)');",
     );
     await writeFile(
-      join(dir, '1794787200021_failure.cjs'),
+      join(dir, '1794873600011_failure.cjs'),
       "exports.up = pgm => pgm.sql('SELECT missing_column FROM lab.tenants');",
     );
     await expect(migrateDatabase(migrator, dir)).rejects.toBeDefined();
@@ -270,7 +270,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(2);
+    ).toBe(3);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -681,7 +681,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test('upgrading the previous identity schema adds seed state without changing existing data', async () => {
+test('upgrading the seeded two-migration baseline preserves credentials and existing data', async () => {
   const { mkdtemp, copyFile, rm } = require('node:fs/promises');
   const { tmpdir } = require('node:os');
   const { join } = require('node:path');
@@ -692,6 +692,10 @@ test('upgrading the previous identity schema adds seed state without changing ex
     await copyFile(
       'database/migrations/1794787200000_identity-foundation.cjs',
       join(directory, '1794787200000_identity-foundation.cjs'),
+    );
+    await copyFile(
+      'database/migrations/1794787200010_seed-manifests.cjs',
+      join(directory, '1794787200010_seed-manifests.cjs'),
     );
     await admin.query('CREATE DATABASE lab_upgrade_test');
     created = true;
@@ -708,22 +712,45 @@ test('upgrading the previous identity schema adds seed state without changing ex
     await bootstrapDatabase(upgrade);
     // Upgrade-only fixture; role security is exercised with authenticated non-admin sessions above.
     await upgrade.query('SET ROLE lab_migrator');
-    expect(await migrateDatabase(upgrade, directory)).toBe(1);
+    expect(await migrateDatabase(upgrade, directory)).toBe(2);
     await upgrade.query(
       "INSERT INTO lab.tenants(id,name) VALUES('90000000-0000-4000-8000-000000000001','Fictional upgrade fixture')",
     );
+    const { seedDemoIdentities } = await import('../../database/dist/index.js');
+    await upgrade.query('SET ROLE lab_seed');
+    await seedDemoIdentities(upgrade, join(directory, 'private-identities'));
+    const before = (
+      await upgrade.query(
+        "SELECT encode(credentials_digest,'hex') AS digest FROM lab.seed_manifests",
+      )
+    ).rows[0].digest;
+    await upgrade.query('SET ROLE lab_migrator');
     expect(await migrateDatabase(upgrade)).toBe(1);
+    expect(
+      (
+        await upgrade.query(
+          "SELECT encode(credentials_digest,'hex') AS digest FROM lab.seed_manifests",
+        )
+      ).rows[0].digest,
+    ).toBe(before);
+    expect(
+      (await upgrade.query('SELECT * FROM lab.api_readiness')).rows,
+    ).toEqual([{ contract_version: 1, identities_ready: true }]);
     expect(await migrateDatabase(upgrade)).toBe(0);
-    expect((await upgrade.query('SELECT name FROM lab.tenants')).rows).toEqual([
-      { name: 'Fictional upgrade fixture' },
-    ]);
+    expect(
+      (
+        await upgrade.query(
+          "SELECT name FROM lab.tenants WHERE id='90000000-0000-4000-8000-000000000001'",
+        )
+      ).rows,
+    ).toEqual([{ name: 'Fictional upgrade fixture' }]);
     expect(
       (
         await upgrade.query(
           'SELECT count(*)::int AS count FROM lab.seed_manifests',
         )
       ).rows[0].count,
-    ).toBe(0);
+    ).toBe(1);
   } finally {
     await upgrade?.end();
     if (created) await admin.query('DROP DATABASE lab_upgrade_test');
@@ -781,4 +808,55 @@ test('database login provisioning preserves passwords and limits each login to i
   await expect(
     provisionDatabaseLogins(admin, { ...passwords, api: 'invalid' }),
   ).rejects.toThrow('Invalid database login material');
+});
+
+test('API readiness exposes only versioned bootstrap metadata and reflects committed seed state', async () => {
+  const { seedDemoIdentities } = await import('../../database/dist/index.js');
+  const { mkdtemp, rm } = require('node:fs/promises');
+  const { tmpdir } = require('node:os');
+  const { join } = require('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'lab-api-readiness-'));
+  const seed = await connectAs('lab_seed');
+  const api = await connectAs('lab_api');
+  const tenants = [
+    'a1000000-0000-4000-8000-000000000001',
+    'a1000000-0000-4000-8000-000000000002',
+  ];
+  try {
+    expect((await api.query('SELECT * FROM lab.api_readiness')).rows).toEqual([
+      { contract_version: 1, identities_ready: false },
+    ]);
+    await expect(
+      api.query('SELECT * FROM lab.seed_manifests'),
+    ).rejects.toMatchObject({ code: '42501' });
+    await seedDemoIdentities(seed, directory);
+    expect((await api.query('SELECT * FROM lab.api_readiness')).rows).toEqual([
+      { contract_version: 1, identities_ready: true },
+    ]);
+    await admin.query(
+      "UPDATE lab.seed_manifests SET fixture_digest=decode(repeat('00',32),'hex') WHERE name='identities-v1'",
+    );
+    expect(
+      (await api.query('SELECT * FROM lab.api_readiness')).rows[0]
+        .identities_ready,
+    ).toBe(false);
+  } finally {
+    await api.end();
+    await seed.end();
+    await admin.query(
+      'DELETE FROM lab.auth_credentials WHERE principal_id IN (SELECT id FROM lab.principals WHERE tenant_id=ANY($1::uuid[]))',
+      [tenants],
+    );
+    await admin.query(
+      'DELETE FROM lab.principals WHERE tenant_id=ANY($1::uuid[])',
+      [tenants],
+    );
+    await admin.query('DELETE FROM lab.tenants WHERE id=ANY($1::uuid[])', [
+      tenants,
+    ]);
+    await admin.query(
+      "DELETE FROM lab.seed_manifests WHERE name='identities-v1'",
+    );
+    await rm(directory, { recursive: true, force: true });
+  }
 });

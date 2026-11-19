@@ -29,6 +29,11 @@
 !database/bootstrap/**
 !database/migrations/
 !database/migrations/**
+!infra/
+!infra/kafka/
+!infra/kafka/Dockerfile
+!infra/kafka/init-topics.sh
+!infra/kafka/admin.properties
 # Private state must remain excluded even beneath an allowed source directory.
 **/.env
 **/.env.*

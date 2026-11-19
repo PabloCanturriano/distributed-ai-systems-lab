@@ -52,6 +52,64 @@ services:
       start_period: 5s
     stop_grace_period: 15s
 
+  kafka:
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_DELETE_TOPIC_ENABLE: 'false'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    mem_limit: 1g
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          "KAFKA_HEAP_OPTS='-Xms32m -Xmx128m' /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    stop_grace_period: 30s
+
+  kafka-init:
+    build:
+      context: .
+      dockerfile: infra/kafka/Dockerfile
+    environment:
+      APP_MODE: local
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1777
+      - /opt/kafka/logs:uid=1000,gid=1000,mode=0700
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: 'no'
+
   redis:
     image: redis:8.10.3-trixie@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53
     user: redis
@@ -153,6 +211,8 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
     stop_grace_period: 15s
 
 networks:
@@ -161,6 +221,7 @@ networks:
     internal: true
 
 volumes:
+  kafka_data:
   postgres_data:
   admin_secret:
   migrator_secret:

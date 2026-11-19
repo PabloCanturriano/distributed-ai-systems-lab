@@ -1,6 +1,6 @@
 # Test strategy and acceptance evidence
 
-Status: fast Jest checks, real PostgreSQL integration, application image smoke, and [Compose foundation verification](reviews/0006-compose-foundation.md) are implemented, including [API dependency outage checks](reviews/0007-api-readiness.md). Broker integration, business acceptance, and the complete ticket workflow remain not run. Each review records actual scope and results.
+Status: fast Jest checks, real PostgreSQL integration, application image smoke, and [Compose foundation verification](reviews/0006-compose-foundation.md) are implemented, including [API dependency outage checks](reviews/0007-api-readiness.md). The [native Kafka transport check](reviews/0008-kafka-foundation.md) covers broker persistence and topic startup gates. Application broker/database handoff, business acceptance, and the complete ticket workflow remain not run. Each review records actual scope and results.
 
 ## Development loop
 

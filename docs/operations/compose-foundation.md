@@ -1,19 +1,19 @@
 # Docker Compose database foundation
 
-Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The [API readiness adapter](api-readiness.md) now checks PostgreSQL bootstrap metadata and Redis. The worker remains idle. Kafka, telemetry, authenticated routes, rate limiting, and ticket processing are not wired yet. This command does not complete phase 1 or provide the planned ticket demo.
+Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The [API readiness adapter](api-readiness.md) now checks PostgreSQL bootstrap metadata and Redis. The worker remains idle. The [Kafka foundation](kafka-foundation.md) adds a persistent broker and explicit topics; telemetry, authenticated routes, rate limiting, and ticket processing are not wired yet. This command does not complete phase 1 or provide the planned ticket demo.
 
 ## Start and stop
 
 From the repository root, with Docker running and network access for image/package downloads:
 
 ```sh
-docker compose up --build --detach --wait --wait-timeout 120
+docker compose up --build --detach --wait --wait-timeout 180
 ```
 
 No host Node, copied secret file, public password, or external provider key is needed. The API is published at `http://127.0.0.1:3000`; to choose a different host port:
 
 ```sh
-LAB_API_PORT=3001 docker compose up --build --detach --wait --wait-timeout 120
+LAB_API_PORT=3001 docker compose up --build --detach --wait --wait-timeout 180
 ```
 
 Inspect only safe initialization events:
@@ -39,7 +39,8 @@ The next `up` reuses passwords, identity credentials, schema history, and rows. 
 3. `bootstrap`: a non-root administrative job creates privilege groups, extension/schema, and five login roles. Each login has no inherited privileges and may select only its assigned privilege group. Existing mismatched attributes/memberships fail instead of being rewritten. Existing passwords are authenticated and never rotated automatically.
 4. `migrate`: a non-root job mounts only its own password volume, authenticates as `lab_migrator_login`, selects `lab_migrator`, and applies ordered migrations.
 5. `seed`: a non-root job mounts only its database password and writable demo-credential volume. It selects `lab_seed` and executes the [durable identity protocol](local-identities.md). Raw fictional credentials are stored under `identities/identities-v1.json` in that volume.
-6. `api` starts after seeding and Redis health, mounts only its own database password read-only, and checks PostgreSQL plus Redis. `worker` starts after seeding and remains idle without credential mounts. Neither mounts raw demo credentials. Redis starts independently on the internal backend network with no host port or persistence.
+6. `api` starts after seeding and Redis health, mounts only its own database password read-only, and checks PostgreSQL plus Redis. `worker` starts after seeding and successful `kafka-init`, and remains idle without credential mounts. Neither mounts raw demo credentials. Redis starts independently on the internal backend network with no host port or persistence.
+7. `kafka` starts independently as a persistent combined KRaft broker/controller without host ports. After broker health, `kafka-init` creates or verifies the two fixed topics. An incompatible existing topic blocks newly starting workers without automatically altering the topic. The API has no Kafka dependency.
 
 All initializer commands emit fixed completion/failure events with safe counts/status where applicable. No password is passed as a command argument, embedded in Compose environment values, or written into an image. The administrative bootstrap job can read all five login passwords to provision/verify them; those mounts are read-only. The raw demo credential volume is mounted only by trusted secret-volume preparation and seeding, with CLI access still future work.
 

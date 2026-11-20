@@ -257,6 +257,100 @@ test('the outbox envelope constraint rejects missing metadata rather than allowi
   });
   expect(await counts()).toEqual([1, 1, 1, 1]);
 });
+
+async function credential(owner = principal) {
+  const lookupId = randomUUID();
+  const secret = randomBytes(32);
+  await migrator.query(
+    'INSERT INTO lab.auth_credentials(id,principal_id,secret_digest) VALUES($1,$2,$3)',
+    [lookupId, owner, createHash('sha256').update(secret).digest()],
+  );
+  return {
+    lookupId,
+    secret: secret.toString('base64url'),
+    header: `Bearer ${lookupId}.${secret.toString('base64url')}`,
+  };
+}
+function access() {
+  const { TicketAccess } = require('../../apps/api/dist/ticket-access.js');
+  return new TicketAccess(pool, { consume: async () => {} });
+}
+
+test('opaque bearer authentication resolves the current server-owned tenant and role from stored digest', async () => {
+  const token = await credential();
+  expect(await access().authenticate(token.header)).toEqual({
+    tenantId: tenant,
+    principalId: principal,
+    role: 'requester',
+  });
+  expect(
+    await access().authenticate(token.header.replace('Bearer', 'bearer')),
+  ).toEqual({ tenantId: tenant, principalId: principal, role: 'requester' });
+  const other = await credential(otherPrincipal);
+  expect(await access().authenticate(other.header)).toEqual({
+    tenantId: otherTenant,
+    principalId: otherPrincipal,
+    role: 'requester',
+  });
+  const readerToken = await credential(reader);
+  expect((await access().authenticate(readerToken.header)).role).toBe('reader');
+});
+
+test.each([
+  undefined,
+  '',
+  'Basic invalid',
+  'Bearer invalid',
+  'Bearer ' + randomUUID() + '.' + 'A'.repeat(42) + 'B',
+  'Bearer ' + randomUUID() + '.' + 'A'.repeat(44),
+])('malformed credentials fail generically: %s', async (header) => {
+  await expect(access().authenticate(header)).rejects.toMatchObject({
+    code: 'UNAUTHENTICATED',
+    message: 'UNAUTHENTICATED',
+  });
+  expect(await counts()).toEqual([0, 0, 0, 0]);
+});
+
+test('unknown lookup IDs and incorrect secrets receive the same authentication result', async () => {
+  const token = await credential();
+  await expect(
+    access().authenticate(`Bearer ${randomUUID()}.${token.secret}`),
+  ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+  await expect(
+    access().authenticate(
+      `Bearer ${token.lookupId}.${randomBytes(32).toString('base64url')}`,
+    ),
+  ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+});
+
+test.each(['revoked', 'expired', 'disabled'])(
+  'credential/principal changes invalidate later authentication without a cache: %s',
+  async (state) => {
+    const token = await credential();
+    const authenticator = access();
+    await authenticator.authenticate(token.header);
+    if (state === 'revoked')
+      await migrator.query(
+        'UPDATE lab.auth_credentials SET revoked_at=CURRENT_TIMESTAMP WHERE id=$1',
+        [token.lookupId],
+      );
+    if (state === 'expired')
+      await migrator.query(
+        "UPDATE lab.auth_credentials SET created_at=CURRENT_TIMESTAMP-interval '2 seconds',expires_at=CURRENT_TIMESTAMP-interval '1 second' WHERE id=$1",
+        [token.lookupId],
+      );
+    if (state === 'disabled')
+      await migrator.query(
+        'UPDATE lab.principals SET disabled_at=CURRENT_TIMESTAMP WHERE id=$1',
+        [principal],
+      );
+    await expect(
+      authenticator.authenticate(token.header),
+    ).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+  },
+);
 function input(overrides = {}) {
   return {
     tenantId: tenant,

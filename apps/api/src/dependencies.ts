@@ -4,14 +4,17 @@ import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { Pool } from 'pg';
 import type { ReadinessProbe } from './app';
+import { TicketAccess } from './ticket-access';
+import { RedisSubmissionLimits } from './submission-limits';
 
 type DependencyEvent =
   | 'postgres_connection_error'
   | 'redis_connection_error'
   | 'redis_connection_stopped'
-  | 'redis_readiness_timeout';
+  | 'redis_command_timeout';
 
 export class ApiDependencies implements ReadinessProbe {
+  readonly tickets: TicketAccess;
   private readonly postgres: Pool;
   private readonly redis: ReturnType<typeof createClient>;
   private pending: Promise<boolean> | undefined;
@@ -44,10 +47,19 @@ export class ApiDependencies implements ReadinessProbe {
         reconnectStrategy: (retries) => Math.min(200 * (retries + 1), 2000),
       },
       disableOfflineQueue: true,
-      commandsQueueMaxLength: 8,
+      // Bound pending/in-flight commands while allowing a small business-request burst.
+      commandsQueueMaxLength: 64,
       commandOptions: { timeout: 1000 },
     });
     this.redis.on('error', () => this.report('redis_connection_error'));
+    this.tickets = new TicketAccess(
+      this.postgres,
+      new RedisSubmissionLimits((script, keys, args) =>
+        this.redisOperation(() =>
+          this.redis.eval(script, { keys, arguments: args }),
+        ),
+      ),
+    );
     this.connectRedis();
   }
 
@@ -91,13 +103,19 @@ export class ApiDependencies implements ReadinessProbe {
   }
 
   private async redisPing(): Promise<string> {
+    return this.redisOperation(() => this.redis.ping());
+  }
+
+  private async redisOperation<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.closed || !this.redis.isReady)
+      throw new Error('Redis unavailable');
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error('Redis readiness deadline exceeded'));
-        this.report('redis_readiness_timeout');
+        reject(new Error('Redis command deadline exceeded'));
+        this.report('redis_command_timeout');
         // The SDK queue timeout stops at send time. Close an unresponsive in-flight socket
-        // so stale replies cannot build up, then reconnect without retrying this command.
+        // so stale replies cannot build up, then reconnect without replaying this command.
         if (!this.closed && this.redis.isOpen) {
           this.redis.destroy();
           this.connectRedis();
@@ -105,7 +123,7 @@ export class ApiDependencies implements ReadinessProbe {
       }, 1000);
     });
     try {
-      return await Promise.race([this.redis.ping(), deadline]);
+      return await Promise.race([operation(), deadline]);
     } finally {
       clearTimeout(timer);
     }

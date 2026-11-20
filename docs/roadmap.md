@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phase 1 is in progress after architecture acceptance on 2026-11-16. Runtime, startup configuration, and application image slices are committed. Database identity foundation and persistent fictional identity seeding are committed; the Compose initialization foundation is committed; [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) and foundation CI are committed. The first phase-2 slice, [atomic ticket submission](quality/reviews/0011-ticket-submission.md), is prepared for review without a public HTTP route. No full application acceptance scenario has passed yet.
+Status: phase 1 is in progress after architecture acceptance on 2026-11-16. Runtime, startup configuration, and application image slices are committed. Database identity foundation and persistent fictional identity seeding are committed; the Compose initialization foundation is committed; [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) and foundation CI are committed. The first phase-2 slice, [atomic ticket submission](quality/reviews/0011-ticket-submission.md), is committed. [Authenticated HTTP submission](quality/reviews/0012-authenticated-ticket-http.md) is prepared for review. No complete ticket-processing workflow has passed yet.
 
 ## Phase 0: architecture review
 
@@ -52,4 +52,4 @@ Small patch sequence: foundation; create transaction/idempotency; publication; a
 
 ## Evidence register
 
-All application scenarios are currently **not run**. Record implementation/test/report links as work proceeds in [the testing strategy](quality/testing.md). Scenario IDs are durable acceptance references, not current claims of completion.
+Submission and selected security checks have passing local evidence in [review 0012](quality/reviews/0012-authenticated-ticket-http.md). Other acceptance families remain not run unless a focused review records an actual passing subset. Follow [the testing strategy](quality/testing.md); scenario IDs do not imply completion of the full ticket workflow.

@@ -1,6 +1,6 @@
 # Local authentication and threat model
 
-Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. The [Compose foundation](../operations/compose-foundation.md) now provisions restricted database logins and private password volumes. The [API readiness adapter](../operations/api-readiness.md) mounts only its own database password and reads metadata through its restricted role. HTTP authentication, tenant isolation, and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
+Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. The [Compose foundation](../operations/compose-foundation.md) now provisions restricted database logins and private password volumes. The [API readiness adapter](../operations/api-readiness.md) mounts only its own database password and reads metadata through its restricted role. Authenticated HTTP submission, server-derived tenant scope and Redis request limits are [prepared for review](../quality/reviews/0012-authenticated-ticket-http.md). Other routes and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
 
 ## Scope and assumptions
 
@@ -24,9 +24,9 @@ Tenant-level visibility is intentional; individual ticket ownership isolation is
 
 A credential consists of a non-secret lookup ID and a cryptographically generated secret with at least 256 bits of randomness. Persist only a digest of the high-entropy secret and its principal association. Verification must use appropriate constant-time comparison. Never use human passwords or predictable public demo strings as bearer secrets.
 
-The seed/bootstrap process creates credentials on first initialization and writes the raw local demo credentials to a dedicated shared volume. Only bootstrap and the CLI mount that volume; the API resolves credential digests through PostgreSQL. Existing local data must not silently generate replacement credentials on every startup. A missing credential volume with an existing database is a provisioning error requiring explicit recovery or reset.
+The seed/bootstrap process creates credentials on first initialization and writes the raw local demo credentials to a dedicated shared volume. Only trusted volume preparation/seeding and the future CLI mount that volume; the API resolves credential digests through PostgreSQL. Existing local data must not silently generate replacement credentials on every startup. A missing credential volume with an existing database is a provisioning error requiring explicit recovery or reset.
 
-The trusted seed operation now persists six fictional identities and private raw secret material, with file/database consistency checks. Compose credential-volume wiring and HTTP/CLI use remain unimplemented; see the [implemented provisioning protocol](../operations/local-identities.md).
+The trusted seed operation now persists six fictional identities and private raw secret material, with file/database consistency checks. Compose credential-volume wiring is implemented and HTTP verification is prepared for review; CLI use remains unimplemented; see the [implemented provisioning protocol](../operations/local-identities.md).
 
 The CLI selects an identity by a non-secret alias, reads its credential from the volume, and injects the bearer header. Do not pass secrets in CLI arguments, URLs, or committed files. Manual HTTP examples can describe local credential retrieval without printing credentials during normal startup. The default interactive demo uses a requester; replay scenarios explicitly select an operator.
 
@@ -91,7 +91,7 @@ Real-model mode is an explicit opt-in because retrieved context and ticket conte
 
 ## Acceptance specifications
 
-These are future tests and inspection checks, not evidence of passing controls:
+These are required scenarios. Current passing submission/authentication subsets and limits are recorded in review 0012; the remaining checks are future work:
 
 - SEC-01: missing, malformed, revoked, expired, and disabled credentials produce generic `401` responses without secret leakage.
 - SEC-02: a reader cannot create or replay; a requester cannot replay; an operator remains tenant-scoped.

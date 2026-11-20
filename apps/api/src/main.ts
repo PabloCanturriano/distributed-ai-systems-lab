@@ -7,10 +7,12 @@ async function main(): Promise<void> {
   const dependencies = configuration.dependencies
     ? await ApiDependencies.create(configuration.dependencies)
     : undefined;
-  const app = await createApi(dependencies).catch(async (error: unknown) => {
-    await dependencies?.onApplicationShutdown();
-    throw error;
-  });
+  const app = await createApi(dependencies, dependencies?.tickets).catch(
+    async (error: unknown) => {
+      await dependencies?.onApplicationShutdown();
+      throw error;
+    },
+  );
   app.enableShutdownHooks();
   try {
     await app.listen(configuration.port, configuration.host);

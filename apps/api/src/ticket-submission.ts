@@ -43,7 +43,7 @@ export class TicketSubmissionError extends Error {
 }
 
 // Internal boundary only. Tenant/principal context must come from server authentication,
-// never directly from an HTTP body/header. No public route is wired in this slice.
+// never directly from an HTTP body/header.
 export class TicketSubmissions {
   constructor(private readonly pool: Pick<Pool, 'connect'>) {}
 

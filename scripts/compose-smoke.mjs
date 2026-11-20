@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const exec = promisify(execFile);
 const project = `lab-compose-${process.pid}-${Date.now()}`;
@@ -11,6 +12,86 @@ const docker = (args, timeout = 30_000) =>
   exec('docker', args, { env, timeout, maxBuffer: 20 * 1024 * 1024 });
 const compose = (args, timeout) => docker([...prefix, ...args], timeout);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
+const httpScenario = readFileSync(
+  new URL('./ticket-http-scenario.mjs', import.meta.url),
+  'utf8',
+);
+async function ticketScenario(mode, key) {
+  const result = await compose(
+    [
+      'run',
+      '--rm',
+      '--no-deps',
+      '-T',
+      '--entrypoint',
+      'node',
+      'seed',
+      '--input-type=module',
+      '-e',
+      httpScenario,
+      mode,
+      ...(key ? [key] : []),
+    ],
+    30000,
+  );
+  assert.deepEqual(JSON.parse(result.stdout), {
+    event: 'ticket_http_scenario_passed',
+    mode,
+  });
+}
+async function ticketDatabase(sql, privileged = false) {
+  const code = `import {Client} from 'pg';import {readFileSync} from 'node:fs';const role=process.argv[2];const c=new Client({host:'postgres',database:'lab',user:'lab_'+role+'_login',password:readFileSync('/run/lab/'+role+'/password','utf8'),connectionTimeoutMillis:5000,statement_timeout:5000});await c.connect();try{await c.query('SET ROLE lab_'+role);const result=await c.query(process.argv[1]);console.log(JSON.stringify(result.rows));}finally{await c.end();}`;
+  // Inspect counts through the running API's existing read privileges. Only the
+  // explicit revocation fixtures require a separate trusted migration-role job.
+  const command = privileged
+    ? ['run', '--rm', '--no-deps', '-T', '--entrypoint', 'node', 'migrate']
+    : ['exec', '-T', 'api', 'node'];
+  const result = await compose([
+    ...command,
+    '--input-type=module',
+    '-e',
+    code,
+    sql,
+    privileged ? 'migrator' : 'api',
+  ]);
+  return JSON.parse(result.stdout);
+}
+async function ticketCount() {
+  return (
+    await ticketDatabase('SELECT count(*)::int AS count FROM lab.tickets')
+  )[0].count;
+}
+async function clearTestLimits() {
+  await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'EVAL',
+    "for _,key in ipairs(redis.call('KEYS','lab:limits:*')) do redis.call('DEL',key) end return 1",
+    '0',
+  ]);
+}
+async function redisWindow() {
+  const result = await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    '--raw',
+    'TIME',
+  ]);
+  return Number(result.stdout.split('\n')[0]);
+}
+async function windowCheckpoint() {
+  const deadline = performance.now() + 35000;
+  while (performance.now() < deadline) {
+    const seconds = await redisWindow();
+    if (seconds % 60 < 30) return Math.floor(seconds / 60);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('No fixed-window checkpoint within deadline');
+}
 
 async function report() {
   const script = `
@@ -177,11 +258,122 @@ try {
       200,
     );
   }
+  await ticketScenario('basic');
+  assert.equal(await ticketCount(), 4);
+  const tenantCounts = await ticketDatabase(
+    'SELECT tenant_id,count(*)::int AS count FROM lab.tickets GROUP BY tenant_id ORDER BY tenant_id',
+  );
+  assert.deepEqual(tenantCounts, [
+    { tenant_id: 'a1000000-0000-4000-8000-000000000001', count: 3 },
+    { tenant_id: 'a1000000-0000-4000-8000-000000000002', count: 1 },
+  ]);
+  for (const mode of ['idempotency-race', 'tenant-limit', 'ingress-limit']) {
+    await clearTestLimits();
+    const window = await windowCheckpoint();
+    const count = await ticketCount();
+    await ticketScenario(mode);
+    assert.equal(
+      Math.floor((await redisWindow()) / 60),
+      window,
+      'limiter assertion must remain within its observed fixed window',
+    );
+    assert.equal(
+      await ticketCount(),
+      count +
+        (mode === 'tenant-limit' ? 10 : mode === 'idempotency-race' ? 1 : 0),
+    );
+  }
+  await clearTestLimits();
+  const principalKey = `lab:limits:principal:${hash('a1000000-0000-4000-8000-000000000001:a2000000-0000-4000-8000-000000000002')}`;
+  const window = await windowCheckpoint();
+  await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'HSET',
+    principalKey,
+    'window',
+    String(window),
+    'count',
+    '120',
+  ]);
+  await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'EXPIRE',
+    principalKey,
+    '120',
+  ]);
+  const limitedCount = await ticketCount();
+  await ticketScenario('limited');
+  assert.equal(await ticketCount(), limitedCount);
+  // A stale UTC-minute bucket must reset on the next accepted request.
+  await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'HSET',
+    principalKey,
+    'window',
+    String(window - 1),
+    'count',
+    '120',
+  ]);
+  await ticketScenario('accepted', 'revocation-retry');
+  assert.equal(await ticketCount(), limitedCount + 1);
+  const ttl = await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'TTL',
+    principalKey,
+  ]);
+  assert.ok(Number(ttl.stdout) > 0 && Number(ttl.stdout) <= 120);
+  await compose([
+    'exec',
+    '-T',
+    'redis',
+    'redis-cli',
+    'HSET',
+    principalKey,
+    'count',
+    'invalid-counter',
+  ]);
+  await ticketScenario('unavailable');
+  assert.equal(
+    await ticketCount(),
+    limitedCount + 1,
+    'corrupt limiter state must not permit a write',
+  );
+  await clearTestLimits();
+  await ticketDatabase(
+    "UPDATE lab.auth_credentials SET revoked_at=CURRENT_TIMESTAMP WHERE principal_id='a2000000-0000-4000-8000-000000000002'",
+    true,
+  );
+  await ticketScenario('revoked');
+  assert.equal(await ticketCount(), limitedCount + 1);
+  await ticketDatabase(
+    "UPDATE lab.auth_credentials SET revoked_at=NULL WHERE principal_id='a2000000-0000-4000-8000-000000000002'",
+    true,
+  );
+  console.log(
+    'Real HTTP submission, credentials, idempotency, tenant scope and Redis limits passed',
+  );
+  await clearTestLimits();
   for (const service of ['redis', 'postgres']) {
+    const count = await ticketCount();
     await compose(['stop', service]);
     await expectReadiness(503);
+    await ticketScenario('unavailable');
     await compose(['start', service]);
     await expectReadiness(200);
+    assert.equal(await ticketCount(), count);
+    await ticketScenario('accepted');
     const current = await inspectService('api');
     assert.equal(current.Id, api.Id);
     assert.equal(current.RestartCount, 0);
@@ -192,13 +384,16 @@ try {
 
   for (const service of ['redis', 'postgres']) {
     console.log(`Checking unresponsive ${service}`);
+    const count = await ticketCount();
     await compose(['pause', service]);
     try {
       await expectReadiness(503);
+      await ticketScenario('unavailable');
     } finally {
       await compose(['unpause', service]);
     }
     await expectReadiness(200);
+    assert.equal(await ticketCount(), count);
   }
   assert.equal((await inspectService('api')).Id, api.Id);
   assert.equal((await inspectService('api')).RestartCount, 0);

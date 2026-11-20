@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: proposed. Examples and acceptance scenarios are specifications, not implemented endpoints or passing tests. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
+Status: authenticated `POST /v1/tickets` is implemented and locally verified, prepared for [exact-patch review](../quality/reviews/0012-authenticated-ticket-http.md). Ticket reads, replay and application event handling remain planned; this is not evidence for the complete scenario table. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
 
 ## Common HTTP rules
 
@@ -32,7 +32,7 @@ Body:
 }
 ```
 
-`message` must be a nonempty string after trimming leading and trailing whitespace, with at most 4,000 Unicode code points after trimming. Interior whitespace and case are preserved. The persisted message and hash input use this validated value. Unicode normalization is not performed.
+`message` must be a nonempty string after trimming leading and trailing whitespace, with at most 4,000 Unicode code points after trimming. Interior whitespace and case are preserved. The persisted message and hash input use this validated value. Unicode normalization is not performed. NUL and unpaired Unicode surrogates are rejected because they cannot round-trip as PostgreSQL UTF-8 text.
 
 The canonical hash input is UTF-8 JSON with exactly one field, `message`, serialized without optional whitespace. Include operation version in the hash scope so future contract changes cannot silently reinterpret stored keys. HTTP authentication, trace IDs, and request IDs are not payload fields.
 
@@ -151,7 +151,7 @@ Kafka publication failure cannot erase the failed ticket: its state and pending 
 
 ## Acceptance specifications for TDD
 
-These scenarios will become executable tests after architecture approval. Each scenario must first fail for missing behavior, then pass through the smallest implementation change.
+These scenarios guide executable tests; current passing submission subsets and limits are recorded in the linked HTTP review. Each new behavior must first fail for missing behavior, then pass through the smallest implementation change.
 
 | ID | Given / when | Expected outcome |
 | --- | --- | --- |

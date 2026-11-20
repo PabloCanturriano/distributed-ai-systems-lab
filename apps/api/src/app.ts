@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { Controller, Get, HttpException, Inject, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { TicketController, TICKET_SERVICE } from './ticket-http';
+import type { TicketService } from './ticket-access';
 
 export interface ReadinessProbe {
   isReady(): Promise<boolean>;
@@ -30,18 +32,22 @@ class HealthController {
   }
 }
 
-@Module({ controllers: [HealthController] })
+@Module({ controllers: [HealthController, TicketController] })
 class ApiModule {}
 
 export async function createApi(
   dependencies: ReadinessProbe = { isReady: async () => false },
+  tickets?: TicketService,
 ) {
   const app = await NestFactory.create(
     {
       module: ApiModule,
-      providers: [{ provide: READINESS, useValue: dependencies }],
+      providers: [
+        { provide: READINESS, useValue: dependencies },
+        { provide: TICKET_SERVICE, useValue: tickets ?? null },
+      ],
     },
-    { logger: false },
+    { logger: false, bodyParser: false },
   );
   app.getHttpAdapter().getInstance().disable('x-powered-by');
   return app;

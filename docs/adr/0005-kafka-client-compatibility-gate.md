@@ -1,6 +1,6 @@
 # ADR-0005: Evaluate the Confluent JavaScript client before application messaging
 
-Status: bounded evaluation explicitly approved by the owner on 2026-11-19. The experimental implementation is prepared for exact-patch review; see [results](../quality/reviews/0010-kafka-client-compatibility.md). Application SDK adoption/wiring remains outside this approval.
+Status: bounded evaluation explicitly approved by the owner on 2026-11-19. The experimental implementation was approved and committed; see [results](../quality/reviews/0010-kafka-client-compatibility.md). Application SDK adoption/wiring remains outside this approval; [ADR-0006](0006-local-kafka-relay.md) proposes that next bounded step.
 
 ## Context
 

@@ -16,7 +16,7 @@ const otherTenant = randomUUID();
 const otherPrincipal = randomUUID();
 const reader = randomUUID();
 const operator = randomUUID();
-let container, admin, migrator, pool;
+let container, admin, migrator, pool, relayPool;
 beforeAll(async () => {
   const { bootstrapDatabase, migrateDatabase } =
     await import('../../database/dist/index.js');
@@ -76,6 +76,22 @@ beforeAll(async () => {
     max: 4,
     application_name: 'ticket-submission-test',
   });
+  const relayLogin = `fixture_relay_${randomBytes(4).toString('hex')}`;
+  const relayPassword = randomBytes(32).toString('base64url');
+  await admin.query(
+    `CREATE ROLE ${escapeIdentifier(relayLogin)} LOGIN NOINHERIT PASSWORD ${escapeLiteral(relayPassword)}`,
+  );
+  await admin.query(`GRANT lab_relay TO ${escapeIdentifier(relayLogin)}`);
+  await admin.query(
+    `GRANT CONNECT ON DATABASE ${escapeIdentifier(configuration.database)} TO ${escapeIdentifier(relayLogin)}`,
+  );
+  relayPool = new Pool({
+    ...configuration,
+    user: relayLogin,
+    password: relayPassword,
+    max: 4,
+    application_name: 'outbox-relay-test',
+  });
 }, 180000);
 afterEach(async () => {
   await migrator.query(
@@ -84,6 +100,7 @@ afterEach(async () => {
   await migrator.query('UPDATE lab.principals SET disabled_at=NULL');
 });
 afterAll(async () => {
+  await relayPool?.end();
   await pool?.end();
   await migrator?.end();
   await admin?.end();
@@ -143,6 +160,345 @@ test('submission commits one ticket, execution, receipt and pending event togeth
     await migrator.query('SELECT payload_digest FROM lab.outbox_events')
   ).rows[0].payload_digest;
   expect(digest).toEqual(createHash('sha256').update(event.payload).digest());
+});
+
+test('the relay can durably reserve one pending event without marking it published', async () => {
+  await store().submit(input());
+  const {
+    OutboxPublications,
+  } = require('../../apps/worker/dist/outbox-publications.js');
+  const publications = new OutboxPublications(relayPool);
+  const claims = await publications.claim(20);
+  expect(claims).toHaveLength(1);
+  expect(
+    (await migrator.query('SELECT published_at FROM lab.outbox_events')).rows[0]
+      .published_at,
+  ).toBeNull();
+});
+
+test.each([0, -1, 21, 1.5, NaN])(
+  'unbounded or invalid relay batch size %s is rejected before claiming',
+  async (limit) => {
+    expect(() => publications().claim(limit)).toThrow('INVALID_REQUEST');
+  },
+);
+test('lease validity is checked after acquiring a row lock, including an unchanged locked row', async () => {
+  await store().submit(input());
+  const source = publications();
+  const [claim] = await source.claim();
+  await migrator.query(
+    "UPDATE lab.outbox_events SET claim_expires_at=clock_timestamp()+interval '500 milliseconds' WHERE event_id=$1",
+    [claim.eventId],
+  );
+  await migrator.query('BEGIN');
+  await migrator.query(
+    'SELECT event_id FROM lab.outbox_events WHERE event_id=$1 FOR UPDATE',
+    [claim.eventId],
+  );
+  const pending = source.acknowledge(claim.eventId, claim.token);
+  const settled = Promise.allSettled([pending]);
+  try {
+    const deadline = performance.now() + 1500;
+    let blocked = false,
+      hasExpired = false;
+    while (performance.now() < deadline) {
+      blocked ||=
+        (
+          await admin.query(
+            "SELECT count(*)::int AS count FROM pg_stat_activity WHERE application_name='outbox-relay-test' AND wait_event_type='Lock'",
+          )
+        ).rows[0].count > 0;
+      hasExpired = (
+        await admin.query(
+          'SELECT claim_expires_at<=clock_timestamp() AS expired FROM lab.outbox_events WHERE event_id=$1',
+          [claim.eventId],
+        )
+      ).rows[0].expired;
+      if (blocked && hasExpired) break;
+      await delay(20);
+    }
+    expect(blocked).toBe(true);
+    expect(hasExpired).toBe(true);
+    await migrator.query('COMMIT');
+    expect(await pending).toBe(false);
+    expect(
+      (await migrator.query('SELECT published_at FROM lab.outbox_events'))
+        .rows[0].published_at,
+    ).toBeNull();
+  } finally {
+    await migrator.query('ROLLBACK');
+    await settled;
+  }
+});
+test('losing SQL commit acknowledgement cannot reactivate a published event', async () => {
+  await store().submit(input());
+  const source = publications();
+  const [claim] = await source.claim();
+  let lose = true;
+  const poolProxy = {
+    async connect() {
+      const client = await relayPool.connect();
+      return {
+        async query(text, values) {
+          const result = await client.query(text, values);
+          if (text === 'COMMIT' && lose) {
+            lose = false;
+            throw new Error('fixture-private-network-detail');
+          }
+          return result;
+        },
+        release(discard) {
+          client.release(discard);
+        },
+      };
+    },
+  };
+  const {
+    OutboxPublications,
+  } = require('../../apps/worker/dist/outbox-publications.js');
+  await expect(
+    new OutboxPublications(poolProxy).acknowledge(claim.eventId, claim.token),
+  ).rejects.toMatchObject({
+    code: 'DEPENDENCY_UNAVAILABLE',
+    message: 'DEPENDENCY_UNAVAILABLE',
+  });
+  expect(
+    (await migrator.query('SELECT published_at FROM lab.outbox_events')).rows[0]
+      .published_at,
+  ).toBeInstanceOf(Date);
+  expect(await source.retry(claim.eventId, claim.token)).toBe(false);
+  expect(await source.claim()).toEqual([]);
+});
+function publications() {
+  const {
+    OutboxPublications,
+  } = require('../../apps/worker/dist/outbox-publications.js');
+  return new OutboxPublications(relayPool);
+}
+function relay(publisher, source = publications()) {
+  const { OutboxRelay } = require('../../apps/worker/dist/outbox-relay.js');
+  return new OutboxRelay(source, publisher);
+}
+async function expired(eventId) {
+  await migrator.query(
+    "UPDATE lab.outbox_events SET claim_expires_at=clock_timestamp()-interval '1 second' WHERE event_id=$1",
+    [eventId],
+  );
+}
+async function eligible(eventId) {
+  await migrator.query(
+    "UPDATE lab.outbox_events SET available_at=clock_timestamp()-interval '1 second' WHERE event_id=$1",
+    [eventId],
+  );
+}
+
+test('concurrent relay claims are disjoint and skip a row locked by another process', async () => {
+  for (let i = 0; i < 5; i++)
+    await store().submit(input({ key: `event-${i}` }));
+  await migrator.query('BEGIN');
+  try {
+    const held = (
+      await migrator.query(
+        'SELECT event_id FROM lab.outbox_events ORDER BY event_id LIMIT 1 FOR UPDATE',
+      )
+    ).rows[0].event_id;
+    const [first, second] = await Promise.all([
+      publications().claim(2),
+      publications().claim(2),
+    ]);
+    const ids = [...first, ...second].map((claim) => claim.eventId);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids).not.toContain(held);
+  } finally {
+    await migrator.query('ROLLBACK');
+  }
+  expect(await publications().claim(20)).toHaveLength(1);
+});
+
+test('expired owners cannot acknowledge or reschedule a newer claim', async () => {
+  await store().submit(input());
+  const source = publications();
+  const [old] = await source.claim();
+  await expired(old.eventId);
+  expect(await source.acknowledge(old.eventId, old.token)).toBe(false);
+  const [current] = await source.claim();
+  expect(current.eventId).toBe(old.eventId);
+  expect(current.token).not.toBe(old.token);
+  expect(await source.retry(old.eventId, old.token)).toBe(false);
+  expect(await source.acknowledge(old.eventId, old.token)).toBe(false);
+  expect(await source.acknowledge(current.eventId, current.token)).toBe(true);
+  const row = (
+    await migrator.query(
+      'SELECT publication_attempts,claim_token,claim_expires_at,published_at FROM lab.outbox_events',
+    )
+  ).rows[0];
+  expect(row.publication_attempts).toBe(2);
+  expect(row.claim_token).toBeNull();
+  expect(row.claim_expires_at).toBeNull();
+  expect(row.published_at).toBeInstanceOf(Date);
+  expect(await source.claim()).toEqual([]);
+});
+
+test('publication happens outside SQL transactions and is marked only after the publisher resolves', async () => {
+  await store().submit(input());
+  let release, started;
+  const ready = new Promise((resolve) => {
+    started = resolve;
+  });
+  const sent = new Promise((resolve) => {
+    release = resolve;
+  });
+  let message;
+  const pending = relay({
+    async publish(value) {
+      message = value;
+      started();
+      await sent;
+    },
+  }).publishBatch();
+  await ready;
+  try {
+    expect(
+      (
+        await admin.query(
+          "SELECT count(*)::int AS count FROM pg_stat_activity WHERE application_name='outbox-relay-test' AND xact_start IS NOT NULL",
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    const row = (await migrator.query('SELECT * FROM lab.outbox_events'))
+      .rows[0];
+    expect(row.published_at).toBeNull();
+    expect(row.claim_token).not.toBeNull();
+    expect(message).toEqual({
+      topic: 'tickets.execution-requested.v1',
+      key: row.ticket_id,
+      value: row.payload,
+      eventId: row.event_id,
+    });
+    expect(await publications().claim()).toEqual([]);
+  } finally {
+    release();
+  }
+  expect(await pending).toMatchObject({
+    claimed: 1,
+    published: 1,
+    retryable: 0,
+    stale: 0,
+  });
+});
+
+test('a publisher failure retains immutable bytes and schedules bounded retry without leaking its error', async () => {
+  await store().submit(input());
+  const before = (
+    await migrator.query(
+      'SELECT event_id,payload,payload_digest FROM lab.outbox_events',
+    )
+  ).rows[0];
+  expect(
+    await relay({
+      async publish() {
+        throw new Error('fixture-private-provider-detail');
+      },
+    }).publishBatch(),
+  ).toMatchObject({ published: 0, retryable: 1 });
+  const after = (await migrator.query('SELECT * FROM lab.outbox_events'))
+    .rows[0];
+  expect(after.payload).toBe(before.payload);
+  expect(after.payload_digest).toEqual(before.payload_digest);
+  expect(after.published_at).toBeNull();
+  expect(after.last_error_code).toBe('PUBLISH_FAILED');
+  expect(after.claim_token).toBeNull();
+  expect(await publications().claim()).toEqual([]);
+  await eligible(before.event_id);
+  const received = [];
+  expect(
+    await relay({
+      async publish(message) {
+        received.push(message);
+      },
+    }).publishBatch(),
+  ).toMatchObject({ published: 1 });
+  expect(received[0].value).toBe(before.payload);
+  expect(received[0].eventId).toBe(before.event_id);
+});
+
+test('a crash after publisher acceptance before SQL marking may repeat delivery but preserves event identity', async () => {
+  await store().submit(input());
+  const source = publications();
+  const [first] = await source.claim();
+  const accepted = [first.payload]; // Controlled accepted-message checkpoint, not a broker acknowledgement claim.
+  await expired(first.eventId);
+  await relay({
+    async publish(message) {
+      accepted.push(message.value);
+    },
+  }).publishBatch();
+  expect(accepted).toEqual([first.payload, first.payload]);
+  expect(
+    (await migrator.query('SELECT publication_attempts FROM lab.outbox_events'))
+      .rows[0].publication_attempts,
+  ).toBe(2);
+});
+
+test('late publisher completion cannot mark a claim that another relay reclaimed', async () => {
+  await store().submit(input());
+  const source = publications();
+  let replacement;
+  const result = await relay(
+    {
+      async publish(message) {
+        await expired(message.eventId);
+        [replacement] = await source.claim();
+      },
+    },
+    source,
+  ).publishBatch();
+  expect(result).toMatchObject({ published: 0, stale: 1 });
+  const row = (
+    await migrator.query(
+      'SELECT claim_token,published_at FROM lab.outbox_events',
+    )
+  ).rows[0];
+  expect(row.claim_token).toBe(replacement.token);
+  expect(row.published_at).toBeNull();
+});
+
+test('corrupt stored digest is not published and persists only an allowlisted failure code', async () => {
+  await store().submit(input());
+  await migrator.query('UPDATE lab.outbox_events SET payload_digest=$1', [
+    randomBytes(32),
+  ]);
+  let published = false;
+  expect(
+    await relay({
+      async publish() {
+        published = true;
+      },
+    }).publishBatch(),
+  ).toMatchObject({ retryable: 1, published: 0 });
+  expect(published).toBe(false);
+  expect(
+    (await migrator.query('SELECT last_error_code FROM lab.outbox_events'))
+      .rows[0].last_error_code,
+  ).toBe('INVALID_EVENT');
+});
+
+test('relay role cannot alter event content, delete events or read ticket messages', async () => {
+  await store().submit(input());
+  for (const sql of [
+    "UPDATE lab.outbox_events SET payload='{}'",
+    'DELETE FROM lab.outbox_events',
+    'SELECT message FROM lab.tickets',
+  ]) {
+    const client = await relayPool.connect();
+    try {
+      await client.query('BEGIN; SET LOCAL ROLE lab_relay');
+      await expect(client.query(sql)).rejects.toMatchObject({ code: '42501' });
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  }
 });
 
 function store(source = pool) {

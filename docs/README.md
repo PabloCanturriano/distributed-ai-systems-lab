@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the Compose foundation is committed and [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) and foundation CI are committed; the [ticket-submission transaction](quality/reviews/0011-ticket-submission.md) is committed; [authenticated HTTP submission](quality/reviews/0012-authenticated-ticket-http.md) is committed; [ticket status reads](quality/reviews/0013-ticket-reads.md) are prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the Compose foundation is committed and [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) and foundation CI are committed; the [ticket-submission transaction](quality/reviews/0011-ticket-submission.md) is committed; [authenticated HTTP submission](quality/reviews/0012-authenticated-ticket-http.md) is committed; [ticket status reads](quality/reviews/0013-ticket-reads.md) are committed; the [outbox publication protocol](quality/reviews/0014-outbox-publication.md) is prepared for review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -13,6 +13,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 7. [Architecture review checklist](architecture/review.md): proposed decisions and implementation gate.
 
 ## Implementation preparation
+
+- [Outbox publication protocol](quality/reviews/0014-outbox-publication.md): leased claims, acknowledgement fencing, retries and publisher-double failure checkpoints.
 
 - [Ticket status reads](quality/reviews/0013-ticket-reads.md): receipt URL lookup, tenant isolation, current generation and shared principal limits.
 
@@ -75,3 +77,5 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 ADRs were accepted on 2026-11-16. Updating or accepting a design record does not implement its controls or change non-documentation commit permissions.
 
 Approved evaluation scope: [ADR-0005](adr/0005-kafka-client-compatibility-gate.md) defines a bounded Confluent client compatibility evaluation. Approval does not adopt a new application SDK or implement application messaging.
+
+Proposed application-client integration: [ADR-0006](adr/0006-local-kafka-relay.md). It awaits architecture approval and does not adopt the SDK by itself.

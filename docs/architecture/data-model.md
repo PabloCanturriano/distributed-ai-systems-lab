@@ -1,6 +1,6 @@
 # Relational model and transaction boundaries
 
-Status: logical design with an implemented initial migration for tenants, principals, and credential digests. See [database evidence](../quality/reviews/0004-database-foundation.md). The initial ticket, execution, idempotency and outbox tables plus submission transaction are [implemented and verified](../quality/reviews/0011-ticket-submission.md). Remaining protocols and tables below are proposed. Read with the [overview](overview.md), [contracts](contracts.md), and [execution ADR](../adr/0001-durable-ai-execution.md).
+Status: logical design with an implemented initial migration for tenants, principals, and credential digests. See [database evidence](../quality/reviews/0004-database-foundation.md). The initial ticket, execution, idempotency and outbox tables plus submission transaction are [implemented and verified](../quality/reviews/0011-ticket-submission.md). The [outbox publication protocol](../quality/reviews/0014-outbox-publication.md) is prepared for review with publisher doubles. Remaining protocols and tables below are proposed. Read with the [overview](overview.md), [contracts](contracts.md), and [execution ADR](../adr/0001-durable-ai-execution.md).
 
 ## Conventions and ownership
 

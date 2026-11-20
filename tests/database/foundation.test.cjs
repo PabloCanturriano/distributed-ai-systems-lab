@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(4);
+  expect(applied).toBe(5);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -121,7 +121,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(4);
+  ).toBe(5);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -274,7 +274,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(4);
+    ).toBe(5);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -685,7 +685,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3])(
+test.each([2, 3, 4])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -703,10 +703,15 @@ test.each([2, 3])(
         'database/migrations/1794787200010_seed-manifests.cjs',
         join(directory, '1794787200010_seed-manifests.cjs'),
       );
-      if (baselineCount === 3)
+      if (baselineCount >= 3)
         await copyFile(
           'database/migrations/1794873600000_api-readiness.cjs',
           join(directory, '1794873600000_api-readiness.cjs'),
+        );
+      if (baselineCount === 4)
+        await copyFile(
+          'database/migrations/1795046400000_ticket-submission.cjs',
+          join(directory, '1795046400000_ticket-submission.cjs'),
         );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
@@ -731,13 +736,55 @@ test.each([2, 3])(
         await import('../../database/dist/index.js');
       await upgrade.query('SET ROLE lab_seed');
       await seedDemoIdentities(upgrade, join(directory, 'private-identities'));
+      let pendingEvent;
+      if (baselineCount === 4) {
+        await upgrade.query('RESET ROLE');
+        const {
+          TicketSubmissions,
+        } = require('../../apps/api/dist/ticket-submission.js');
+        const source = {
+          async connect() {
+            return { query: upgrade.query.bind(upgrade), release() {} };
+          },
+        };
+        await new TicketSubmissions(source).submit({
+          tenantId: 'a1000000-0000-4000-8000-000000000001',
+          principalId: 'a2000000-0000-4000-8000-000000000002',
+          requestId: require('node:crypto').randomUUID(),
+          key: 'upgrade-event',
+          body: { message: 'Fictional preserved question' },
+        });
+        pendingEvent = (
+          await upgrade.query(
+            'SELECT event_id,payload,payload_digest FROM lab.outbox_events',
+          )
+        ).rows[0];
+        await upgrade.query('SET ROLE lab_seed');
+      }
       const before = (
         await upgrade.query(
           "SELECT encode(credentials_digest,'hex') AS digest FROM lab.seed_manifests",
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(4 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(5 - baselineCount);
+      if (pendingEvent) {
+        const event = (
+          await upgrade.query(
+            'SELECT * FROM lab.outbox_events WHERE event_id=$1',
+            [pendingEvent.event_id],
+          )
+        ).rows[0];
+        expect(event.payload).toBe(pendingEvent.payload);
+        expect(event.payload_digest).toEqual(pendingEvent.payload_digest);
+        expect(event.publication_attempts).toBe(0);
+        expect(event.claim_token).toBeNull();
+        expect(event.published_at).toBeNull();
+        expect(
+          (await upgrade.query('SELECT message FROM lab.tickets')).rows[0]
+            .message,
+        ).toBe('Fictional preserved question');
+      }
       expect(
         (
           await upgrade.query(

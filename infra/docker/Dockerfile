@@ -24,6 +24,10 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api
 FROM manifests AS worker-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/worker
 
+FROM worker-dependencies AS relay-dependencies
+COPY infra/docker/prepare-kafka-native.mjs /tmp/prepare-kafka-native.mjs
+RUN node /tmp/prepare-kafka-native.mjs
+
 FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime
 ENV NODE_ENV=production APP_MODE=local
 WORKDIR /app
@@ -50,6 +54,9 @@ COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 CMD ["node", "apps/worker/dist/main.js"]
 
+FROM worker AS relay
+COPY --from=relay-dependencies /app/node_modules ./node_modules
+CMD ["node", "apps/worker/dist/relay-main.js"]
 
 FROM manifests AS database-build
 RUN npm ci --ignore-scripts --no-audit --no-fund

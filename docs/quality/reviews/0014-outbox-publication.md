@@ -1,6 +1,6 @@
 # Recoverable outbox publication protocol
 
-Status: prepared for exact-patch review; not committed or pushed. Base `c5ec3c6` contains the approved ticket-read patch. This slice implements SQL ownership and publisher coordination from ADR-0001. Tests use publisher doubles; no application Kafka SDK, real broker publication, relay startup loop or consumer is wired.
+Status: exact patch approved by the owner and committed as `587f3bb`; not pushed. Base `c5ec3c6` contains the approved ticket-read patch. This slice implements SQL ownership and publisher coordination from ADR-0001. Tests use publisher doubles; no application Kafka SDK, real broker publication, relay startup loop or consumer is wired.
 
 Proposed commit: `feat: add recoverable outbox publication protocol`.
 
@@ -30,4 +30,4 @@ Red: after successful ticket creation in the test database, the first claim test
 
 The network double is an explicit port test, not Kafka delivery or EVENT-family completion. A send that succeeded before a crash/timeout may repeat; future inbox/job admission must deduplicate. Database ownership fences publication marking, not every possible external send. A caller must configure connection/query deadlines and error handling; signal cancellation does not forcibly cancel arbitrary SDK work or promise complete worker shutdown by itself.
 
-The next reviewed slice is [ADR-0006](../../adr/0006-local-kafka-relay.md), which proposes the evaluated Confluent client and an opt-in local relay. Its application adoption needs explicit architecture approval because ADR-0005 limited prior authorization to the experiment. No release, hosted operation, consumer, executor or AI behavior is introduced here.
+The next reviewed slice is [ADR-0006](../../adr/0006-local-kafka-relay.md), which proposes the evaluated Confluent client and an opt-in local relay. The owner subsequently approved ADR-0006 on 2026-11-20; its implementation evidence belongs to [review 0015](0015-local-kafka-relay.md). No release, hosted operation, consumer, executor or AI behavior is introduced here.

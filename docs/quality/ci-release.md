@@ -1,16 +1,16 @@
 # CI, release, and deployment plan
 
-Status: a foundation-check workflow is prepared for review; it has not run on GitHub. Registry publishing, release, hosted deployment and the complete acceptance pipeline remain planned.
+Status: the foundation-check workflow is committed; the real relay gate additions are prepared for review. Hosted execution has not been verified. Registry publishing, release, hosted deployment and the complete acceptance pipeline remain planned.
 
 ## Prepared foundation workflow
 
 `.github/workflows/foundation.yml` runs on pull requests, pushes to main and manual dispatch. It uses fixed action revisions, Node 24.22.3, read-only repository permissions, disabled checkout credential persistence, disabled package caching and finite job deadlines. It receives no provider/registry secrets and performs no publication or deployment. The [official runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) distinguish x64 and ARM64 execution.
 
-The checks job runs the existing formatting, type/build and unit tests. The integration job runs the PostgreSQL, application-image, Compose and native Kafka-tool suites sequentially on Ubuntu 24.04 x64. A separate Ubuntu 24.04 ARM64 job runs the [isolated client evaluation](reviews/0010-kafka-client-compatibility.md), whose reviewed native artifact is ARM64-only. The host client runner needs only Node built-ins; its Docker build installs the experimental lockfile with lifecycle hooks disabled.
+The checks job runs the existing formatting, type/build and unit tests. The integration job runs the PostgreSQL, application-image, Compose, native Kafka-tool and real relay suites sequentially on Ubuntu 24.04 x64. A separate Ubuntu 24.04 ARM64 job runs the [isolated client evaluation](reviews/0010-kafka-client-compatibility.md), whose experimental native artifact is ARM64-only, followed by the application relay suite using its separately verified ARM64 artifact. The relay gate also runs on x64; hosted execution of these additions remains unverified. The host client runner needs only Node built-ins; its Docker build installs the experimental lockfile with lifecycle hooks disabled.
 
 The final `Foundation gate` requires every preceding job to succeed, including when another job fails or is skipped. Repository branch protection is not configured by this patch. No logs, credential volumes or snapshots are uploaded as artifacts. The remaining business, security, AI, lint and release gates below are not implemented or represented as passing by this foundation workflow.
 
-Validation: `actionlint` 1.7.12 reported no errors for the workflow; Prettier, relative documentation links and whitespace checks passed locally. The underlying commands have local execution evidence in reviews 0008/0010; Linux x64 hosted execution and the GitHub workflow itself remain unverified until an authorized push and completed run. This patch does not claim a green GitHub check.
+Validation: `actionlint` 1.7.12 reported no errors for the workflow; Prettier, relative documentation links and whitespace checks passed locally. The underlying commands have local execution evidence in reviews 0008/0010 and the relay additions in [review 0015](reviews/0015-local-kafka-relay.md); Linux x64 hosted execution and the GitHub workflow itself remain unverified until an authorized push and completed run. This patch does not claim a green GitHub check.
 
 ## Pull requests
 

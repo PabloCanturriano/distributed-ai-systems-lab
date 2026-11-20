@@ -1,6 +1,6 @@
 # Docker Compose database foundation
 
-Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The [API readiness adapter](api-readiness.md) now checks PostgreSQL bootstrap metadata and Redis. The worker remains idle. The [Kafka foundation](kafka-foundation.md) adds a persistent broker and explicit topics; telemetry, authenticated routes, rate limiting, and ticket processing are not wired yet. This command does not complete phase 1 or provide the planned ticket demo.
+Status: PostgreSQL initialization and process-lifecycle startup are implemented and verified. The [API readiness adapter](api-readiness.md) now checks PostgreSQL bootstrap metadata and Redis. The worker remains idle. The [Kafka foundation](kafka-foundation.md) adds a persistent broker and explicit topics; authenticated ticket submission/reads and rate limiting are implemented; telemetry and ticket processing remain future work. The optional relay below publishes stored events. This command does not complete phase 1 or provide the planned ticket demo.
 
 ## Start and stop
 
@@ -52,7 +52,7 @@ Missing or altered database password material, incompatible roles, failed migrat
 
 The mounted secrets must retain UID/GID 1000 ownership, mode 0700 directories, and mode 0600 regular files. The trusted secret initializer changes ownership only for brand-new empty root-owned volumes. Existing incompatible volumes fail. Administrative passwords remain accessible to the trusted Docker host and initialization jobs; these local secret volumes are not a production secret manager.
 
-Compose dependencies gate startup only. The API adapter separately provides tested readiness degradation/reconnection on PostgreSQL/Redis stop or pause, without restarting the API. Job recovery, worker reconnection, and automatic application restart policies remain future work.
+Compose dependencies gate startup only. The API adapter separately provides tested readiness degradation/reconnection on PostgreSQL/Redis stop or pause, without restarting the API. Consumer/job recovery and automatic application restart policies remain future work; the optional relay retries publication as described below.
 
 ## Verification
 
@@ -63,3 +63,28 @@ npm run test:compose
 The host-side test needs Node 24 and Docker Compose. It creates a unique isolated project, uses an ephemeral loopback API port, verifies named-volume persistence and scoped mounts, then deliberately removes only that test installation's files to exercise failure gates. It verifies known generated secrets are absent from captured logs using hashes and never prints them. Cleanup removes only its project's containers, networks, volumes, and local service image tags. Build caches/base images remain.
 
 See [review evidence](../quality/reviews/0006-compose-foundation.md) for exact versions, actual checks, and limitations.
+
+## Opt-in local publication relay
+
+After building the reviewed relay patch, enable real outbox publication explicitly:
+
+```sh
+docker compose --profile messaging up --build --detach --wait --wait-timeout 180
+```
+
+The separate `relay` entry point polls one leased event at a time, sends its exact stored bytes to the fixed Kafka topic with ticket ID as key, and marks publication only after broker acknowledgement. It uses only its read-only relay-password volume and the restricted `lab_relay` role. The default `worker` remains idle. No consumer or executor is enabled, so published tickets remain queued. API readiness still depends only on PostgreSQL/Redis.
+
+Native downloads are checksum-pinned for Node 24 ABI 137 on Linux glibc arm64/amd64; npm lifecycle scripts remain disabled. The relay-specific build stage fails on an unsupported artifact/platform without changing the default API/idle-worker build path. Build downloads need network access. This trusted local profile uses the existing plaintext internal broker, without production TLS/ACL or high availability claims.
+
+A broker outage keeps events pending and retryable. Shutdown interrupts publication and stops claiming; an acknowledgement followed by a crash before SQL marking may produce duplicate delivery after the 30-second database lease expires. Event identity and bytes remain stable. Future consumers must deduplicate. Safe fixed log events expose no event payload or credential.
+
+```sh
+npm run test:relay
+# Optional alternate-platform execution; Docker Desktop may emulate it.
+RELAY_TEST_PLATFORM=linux/amd64 npm run test:relay
+
+docker compose --profile messaging stop relay
+docker compose --profile messaging down
+```
+
+`--wait` verifies dependency gates but is not a relay-delivery readiness probe. See [review 0015](../quality/reviews/0015-local-kafka-relay.md) for actual platform, failure and delivery evidence. Using the same profile when stopping/removing the stack includes its relay container. Volumes are retained by the operational `down` command.

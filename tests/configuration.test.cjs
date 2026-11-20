@@ -1,7 +1,32 @@
 const {
   loadApiConfiguration,
   loadWorkerConfiguration,
+  loadRelayConfiguration,
 } = require('@lab/configuration');
+
+test('relay selects bounded local endpoints independently of the idle worker', () => {
+  expect(loadRelayConfiguration({})).toEqual({
+    mode: 'local',
+    postgres: { host: 'postgres', port: 5432 },
+    kafka: { host: 'kafka', port: 9092 },
+  });
+  expect(
+    loadRelayConfiguration({
+      RELAY_KAFKA_HOST: '::1',
+      RELAY_KAFKA_PORT: '9093',
+    }).kafka,
+  ).toEqual({ host: '::1', port: 9093 });
+});
+test.each([
+  { APP_MODE: 'production' },
+  { RELAY_PG_PORT: '0' },
+  { RELAY_KAFKA_PORT: '65536' },
+  { RELAY_KAFKA_HOST: 'secret@broker' },
+])('relay rejects unsafe settings with a fixed error', (environment) => {
+  expect(() => loadRelayConfiguration(environment)).toThrow(
+    /^Invalid relay configuration$/,
+  );
+});
 
 test('absent settings select local mode and loopback without mutating the environment', () => {
   const environment = Object.freeze({ UNRELATED_SETTING: 'ignored' });

@@ -1,12 +1,12 @@
 # ADR-0006: Integrate the evaluated client into an opt-in local outbox relay
 
-Status: proposed for owner architecture review on 2026-11-20. No application Kafka dependency, adapter, service or polling loop is introduced by this document. ADR-0005 authorized only the experiment; approval of its test patch did not adopt the SDK in applications.
+Status: bounded local application-client integration explicitly approved by the owner on 2026-11-20. The implementation is prepared for exact-patch review before commit; [review 0015](../quality/reviews/0015-local-kafka-relay.md) records actual evidence. ADR-0005 authorized only the experiment; approval of its test patch did not adopt the SDK in applications.
 
-## Context and proposed decision
+## Context and decision
 
 The [Confluent client experiment](../quality/reviews/0010-kafka-client-compatibility.md) passed its Linux arm64 transport cases. The [outbox protocol](../quality/reviews/0014-outbox-publication.md) now supplies database-owned claims and acknowledgement fencing. Connecting those pieces requires approving the application client choice deferred by ADR-0002/0005.
 
-Propose `@confluentinc/kafka-javascript` 1.11.0 behind the existing `OutboxPublisher` interface for a trusted local publisher only. This replaces the KafkaJS choice for that adapter, not its at-least-once semantics. Recheck releases/advisories before installation; a changed candidate version requires explicit review. The native/OS inventory and scanning gaps from the experiment remain open release gates, not a security-clean adoption claim.
+Use `@confluentinc/kafka-javascript` 1.11.0 behind the existing `OutboxPublisher` interface for a trusted local publisher only. This replaces the KafkaJS choice for that adapter, not its at-least-once semantics. Recheck releases/advisories before installation; a changed candidate version requires explicit review. The native/OS inventory and scanning gaps from the experiment remain open release gates, not a security-clean adoption claim.
 
 ## Bounded next implementation
 
@@ -20,4 +20,4 @@ No consumer/inbox, job executor, result generation, replay, hosted deployment, T
 
 ## Approval boundary
 
-Owner approval authorizes preparing and verifying this bounded application-client integration. Its exact implementation patch still needs separate commit approval, and push/release permission is separate. Until approval, [ADR-0005](0005-kafka-client-compatibility-gate.md) continues to exclude application SDK wiring under [AGENTS.md](../../AGENTS.md).
+Owner approval authorizes preparing and verifying this bounded application-client integration. Its exact implementation patch still needs separate commit approval, and push/release permission is separate. The owner granted this architecture approval on 2026-11-20. It extends the experiment-only boundary of [ADR-0005](0005-kafka-client-compatibility-gate.md) solely for this publisher; [AGENTS.md](../../AGENTS.md) still requires exact-patch approval before its implementation commit.

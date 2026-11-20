@@ -78,3 +78,26 @@ export function loadWorkerConfiguration(environment: Environment) {
   if (!result.success) throw new Error('Invalid worker configuration');
   return Object.freeze({ mode: result.data.APP_MODE });
 }
+
+const relayEnvironment = workerEnvironment.extend({
+  RELAY_PG_HOST: dependencyHost.default('postgres'),
+  RELAY_PG_PORT: dependencyPort(5432),
+  RELAY_KAFKA_HOST: dependencyHost.default('kafka'),
+  RELAY_KAFKA_PORT: dependencyPort(9092),
+});
+
+export function loadRelayConfiguration(environment: Environment) {
+  const result = relayEnvironment.safeParse(environment);
+  if (!result.success) throw new Error('Invalid relay configuration');
+  return Object.freeze({
+    mode: result.data.APP_MODE,
+    postgres: {
+      host: result.data.RELAY_PG_HOST,
+      port: result.data.RELAY_PG_PORT,
+    },
+    kafka: {
+      host: result.data.RELAY_KAFKA_HOST,
+      port: result.data.RELAY_KAFKA_PORT,
+    },
+  });
+}

@@ -30,6 +30,8 @@
 !database/migrations/
 !database/migrations/**
 !infra/
+!infra/docker/
+!infra/docker/prepare-kafka-native.mjs
 !infra/kafka/
 !infra/kafka/Dockerfile
 !infra/kafka/init-topics.sh

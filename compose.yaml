@@ -215,6 +215,26 @@ services:
         condition: service_completed_successfully
     stop_grace_period: 15s
 
+  relay:
+    profiles: [messaging]
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: relay
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    volumes:
+      - relay_secret:/run/lab/relay:ro
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    mem_limit: 256m
+    stop_grace_period: 15s
+
 networks:
   ingress: {}
   backend:

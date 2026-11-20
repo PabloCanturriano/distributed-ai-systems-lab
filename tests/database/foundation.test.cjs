@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(5);
+  expect(applied).toBe(6);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -92,6 +92,9 @@ test('clean install applies the identity migration as the non-superuser owner', 
   );
   expect(tables.rows.map((row) => row.tablename)).toEqual([
     'auth_credentials',
+    'consumer_inbox',
+    'event_quarantine',
+    'execution_jobs',
     'idempotency_records',
     'outbox_events',
     'principals',
@@ -121,7 +124,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(5);
+  ).toBe(6);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -274,7 +277,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(5);
+    ).toBe(6);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -685,7 +688,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3, 4])(
+test.each([2, 3, 4, 5])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -708,10 +711,15 @@ test.each([2, 3, 4])(
           'database/migrations/1794873600000_api-readiness.cjs',
           join(directory, '1794873600000_api-readiness.cjs'),
         );
-      if (baselineCount === 4)
+      if (baselineCount >= 4)
         await copyFile(
           'database/migrations/1795046400000_ticket-submission.cjs',
           join(directory, '1795046400000_ticket-submission.cjs'),
+        );
+      if (baselineCount >= 5)
+        await copyFile(
+          'database/migrations/1795132800000_outbox-publication.cjs',
+          join(directory, '1795132800000_outbox-publication.cjs'),
         );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
@@ -737,7 +745,7 @@ test.each([2, 3, 4])(
       await upgrade.query('SET ROLE lab_seed');
       await seedDemoIdentities(upgrade, join(directory, 'private-identities'));
       let pendingEvent;
-      if (baselineCount === 4) {
+      if (baselineCount >= 4) {
         await upgrade.query('RESET ROLE');
         const {
           TicketSubmissions,
@@ -767,7 +775,7 @@ test.each([2, 3, 4])(
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(5 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(6 - baselineCount);
       if (pendingEvent) {
         const event = (
           await upgrade.query(

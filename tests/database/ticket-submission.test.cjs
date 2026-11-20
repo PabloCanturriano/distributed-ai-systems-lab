@@ -16,7 +16,49 @@ const otherTenant = randomUUID();
 const otherPrincipal = randomUUID();
 const reader = randomUUID();
 const operator = randomUUID();
-let container, admin, migrator, pool, relayPool;
+let container, admin, migrator, pool, relayPool, workerPool;
+
+test('admission durably schedules one job and an inbox identity for a submitted ticket', async () => {
+  const {
+    SchedulingAdmissions,
+  } = require('../../apps/worker/dist/scheduling-admissions.js');
+  await store().submit(input());
+  const row = (
+    await migrator.query(
+      'SELECT ticket_id,event_id,payload FROM lab.outbox_events',
+    )
+  ).rows[0];
+  const result = await new SchedulingAdmissions(workerPool).admit({
+    topic: 'tickets.execution-requested.v1',
+    partition: 0,
+    offset: '0',
+    key: Buffer.from(row.ticket_id),
+    value: Buffer.from(row.payload),
+  });
+  expect(result).toEqual({ disposition: 'scheduled' });
+  expect(
+    (
+      await migrator.query(
+        'SELECT disposition,event_id FROM lab.consumer_inbox',
+      )
+    ).rows,
+  ).toEqual([{ disposition: 'scheduled', event_id: row.event_id }]);
+  expect(
+    (
+      await migrator.query(
+        'SELECT ticket_id,source_event_id,attempt_count,max_attempts,status FROM lab.execution_jobs',
+      )
+    ).rows,
+  ).toEqual([
+    {
+      ticket_id: row.ticket_id,
+      source_event_id: row.event_id,
+      attempt_count: 0,
+      max_attempts: 3,
+      status: 'queued',
+    },
+  ]);
+});
 beforeAll(async () => {
   const { bootstrapDatabase, migrateDatabase } =
     await import('../../database/dist/index.js');
@@ -92,14 +134,31 @@ beforeAll(async () => {
     max: 4,
     application_name: 'outbox-relay-test',
   });
+  const workerLogin = `fixture_worker_${randomBytes(4).toString('hex')}`;
+  const workerPassword = randomBytes(32).toString('base64url');
+  await admin.query(
+    `CREATE ROLE ${escapeIdentifier(workerLogin)} LOGIN NOINHERIT PASSWORD ${escapeLiteral(workerPassword)}`,
+  );
+  await admin.query(`GRANT lab_worker TO ${escapeIdentifier(workerLogin)}`);
+  await admin.query(
+    `GRANT CONNECT ON DATABASE ${escapeIdentifier(configuration.database)} TO ${escapeIdentifier(workerLogin)}`,
+  );
+  workerPool = new Pool({
+    ...configuration,
+    user: workerLogin,
+    password: workerPassword,
+    max: 4,
+    application_name: 'scheduling-admission-test',
+  });
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
+    'TRUNCATE lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
   );
   await migrator.query('UPDATE lab.principals SET disabled_at=NULL');
 });
 afterAll(async () => {
+  await workerPool?.end();
   await relayPool?.end();
   await pool?.end();
   await migrator?.end();
@@ -275,6 +334,385 @@ function publications() {
   } = require('../../apps/worker/dist/outbox-publications.js');
   return new OutboxPublications(relayPool);
 }
+
+function admissions(source = workerPool) {
+  const {
+    SchedulingAdmissions,
+  } = require('../../apps/worker/dist/scheduling-admissions.js');
+  return new SchedulingAdmissions(source);
+}
+async function schedulingRecord(command = {}) {
+  const receipt = await store().submit(
+    input({ key: randomUUID(), ...command }),
+  );
+  const row = (
+    await migrator.query(
+      'SELECT payload FROM lab.outbox_events WHERE ticket_id=$1',
+      [receipt.ticketId],
+    )
+  ).rows[0];
+  return {
+    topic: 'tickets.execution-requested.v1',
+    partition: 0,
+    offset: '0',
+    key: Buffer.from(receipt.ticketId),
+    value: Buffer.from(row.payload),
+  };
+}
+const changedEvent = (record, fields, offset = '1') => ({
+  ...record,
+  offset,
+  value: Buffer.from(
+    JSON.stringify({ ...JSON.parse(record.value), ...fields }),
+  ),
+});
+async function admissionCounts() {
+  const values = [];
+  for (const name of ['consumer_inbox', 'execution_jobs', 'event_quarantine'])
+    values.push(
+      (await migrator.query(`SELECT count(*)::int AS n FROM lab.${name}`))
+        .rows[0].n,
+    );
+  return values;
+}
+test('concurrent redelivery of one event commits one inbox identity and one job', async () => {
+  const record = await schedulingRecord();
+  const results = await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      admissions().admit({ ...record, offset: String(i) }),
+    ),
+  );
+  expect(results.filter((r) => r.disposition === 'scheduled')).toHaveLength(1);
+  expect(results.filter((r) => r.disposition === 'duplicate')).toHaveLength(7);
+  expect(await admissionCounts()).toEqual([1, 1, 0]);
+});
+test('different concurrent event identities for one generation retain every inbox identity but one job', async () => {
+  const record = await schedulingRecord();
+  const results = await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      admissions().admit(
+        changedEvent(record, { eventId: randomUUID() }, String(i)),
+      ),
+    ),
+  );
+  expect(results.filter((r) => r.disposition === 'scheduled')).toHaveLength(1);
+  expect(
+    results.filter((r) => r.disposition === 'duplicate-generation'),
+  ).toHaveLength(7);
+  expect(await admissionCounts()).toEqual([8, 1, 0]);
+});
+test('changed bytes under an admitted event ID are quarantined instead of treated as a duplicate', async () => {
+  const record = await schedulingRecord();
+  await admissions().admit(record);
+  const collision = changedEvent(
+    record,
+    { harmlessAddition: 'different bytes' },
+    '9007199254740993',
+  );
+  expect(await admissions().admit(collision)).toEqual({
+    disposition: 'quarantined',
+    reason: 'EVENT_ID_COLLISION',
+  });
+  expect(await admissions().admit(collision)).toEqual({
+    disposition: 'quarantined',
+    reason: 'EVENT_ID_COLLISION',
+  });
+  expect(await admissionCounts()).toEqual([1, 1, 1]);
+  expect(
+    (
+      await migrator.query(
+        'SELECT "offset",payload_digest FROM lab.event_quarantine',
+      )
+    ).rows,
+  ).toEqual([
+    {
+      offset: '9007199254740993',
+      payload_digest: createHash('sha256').update(collision.value).digest(),
+    },
+  ]);
+});
+test('concurrent event ID reuse across different tickets cannot schedule both tickets', async () => {
+  const first = await schedulingRecord(),
+    second = await schedulingRecord();
+  const collision = changedEvent(second, {
+    eventId: JSON.parse(first.value).eventId,
+  });
+  const results = await Promise.all([
+    admissions().admit(first),
+    admissions().admit(collision),
+  ]);
+  expect(results.map((r) => r.disposition).sort()).toEqual([
+    'quarantined',
+    'scheduled',
+  ]);
+  expect(await admissionCounts()).toEqual([1, 1, 1]);
+});
+test.each([
+  [{ ticketId: '11111111-1111-4111-8111-111111111111' }, 'UNKNOWN_TICKET'],
+  [{ tenantId: '22222222-2222-4222-8222-222222222222' }, 'TENANT_MISMATCH'],
+  [{ generation: 2 }, 'FUTURE_GENERATION'],
+  [{ data: { reason: 'replayed' } }, 'REASON_MISMATCH'],
+])(
+  'authoritative state rejects invalid scheduling metadata',
+  async (fields, reason) => {
+    const record = await schedulingRecord();
+    const changed = changedEvent(record, fields);
+    if (fields.ticketId) changed.key = Buffer.from(fields.ticketId);
+    expect(await admissions().admit(changed)).toEqual({
+      disposition: 'quarantined',
+      reason,
+    });
+    expect(await admissionCounts()).toEqual([0, 0, 1]);
+    expect(
+      (await migrator.query('SELECT status FROM lab.ticket_executions')).rows[0]
+        .status,
+    ).toBe('queued');
+  },
+);
+test('invalid bytes are durably quarantined without storing raw content or accepting a replacement at that position', async () => {
+  const record = await schedulingRecord();
+  const invalid = {
+    ...record,
+    value: Buffer.from('fictional-private-malformed-message'),
+    offset: '9223372036854775807',
+  };
+  const result = { disposition: 'quarantined', reason: 'INVALID_ENVELOPE' };
+  expect(await admissions().admit(invalid)).toEqual(result);
+  expect(
+    await admissions().admit({ ...record, offset: invalid.offset }),
+  ).toEqual(result);
+  expect(await admissionCounts()).toEqual([0, 0, 1]);
+  const columns = (
+    await migrator.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema='lab' AND table_name='event_quarantine'",
+    )
+  ).rows.map((r) => r.column_name);
+  expect(columns.sort()).toEqual([
+    'consumer_name',
+    'created_at',
+    'offset',
+    'partition',
+    'payload_digest',
+    'reason',
+    'topic',
+  ]);
+});
+test('job write failure rolls back its inbox identity and a retry can admit normally', async () => {
+  const record = await schedulingRecord();
+  await migrator.query(
+    "CREATE FUNCTION lab.reject_admission_job() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture-private-admission-detail'; END $$; CREATE TRIGGER reject_admission_job BEFORE INSERT ON lab.execution_jobs FOR EACH ROW EXECUTE FUNCTION lab.reject_admission_job()",
+  );
+  try {
+    await expect(admissions().admit(record)).rejects.toMatchObject({
+      code: 'DEPENDENCY_UNAVAILABLE',
+      message: 'DEPENDENCY_UNAVAILABLE',
+    });
+    expect(await admissionCounts()).toEqual([0, 0, 0]);
+  } finally {
+    await migrator.query(
+      'DROP TRIGGER reject_admission_job ON lab.execution_jobs; DROP FUNCTION lab.reject_admission_job()',
+    );
+  }
+  expect(await admissions().admit(record)).toEqual({
+    disposition: 'scheduled',
+  });
+});
+test('a quarantine storage failure cannot resolve as durably handled', async () => {
+  const record = { ...(await schedulingRecord()), value: null };
+  await migrator.query(
+    "CREATE FUNCTION lab.reject_admission_quarantine() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture-private-quarantine-detail'; END $$; CREATE TRIGGER reject_admission_quarantine BEFORE INSERT ON lab.event_quarantine FOR EACH ROW EXECUTE FUNCTION lab.reject_admission_quarantine()",
+  );
+  try {
+    await expect(admissions().admit(record)).rejects.toMatchObject({
+      code: 'DEPENDENCY_UNAVAILABLE',
+    });
+    expect(await admissionCounts()).toEqual([0, 0, 0]);
+  } finally {
+    await migrator.query(
+      'DROP TRIGGER reject_admission_quarantine ON lab.event_quarantine; DROP FUNCTION lab.reject_admission_quarantine()',
+    );
+  }
+  expect(await admissions().admit(record)).toEqual({
+    disposition: 'quarantined',
+    reason: 'INVALID_ENVELOPE',
+  });
+});
+test('lost real commit acknowledgement leaves a durable job that redelivery does not replace', async () => {
+  const record = await schedulingRecord();
+  let lose = true;
+  const proxy = {
+    async connect() {
+      const client = await workerPool.connect();
+      return {
+        async query(text, values) {
+          const result = await client.query(text, values);
+          if (text === 'COMMIT' && lose) {
+            lose = false;
+            throw new Error('fixture-private-commit-detail');
+          }
+          return result;
+        },
+        release(discard) {
+          client.release(discard);
+        },
+      };
+    },
+  };
+  await expect(admissions(proxy).admit(record)).rejects.toMatchObject({
+    code: 'DEPENDENCY_UNAVAILABLE',
+  });
+  expect(await admissionCounts()).toEqual([1, 1, 0]);
+  const original = (await migrator.query('SELECT id FROM lab.execution_jobs'))
+    .rows[0].id;
+  expect(await admissions().admit(record)).toEqual({
+    disposition: 'duplicate',
+  });
+  expect(
+    (await migrator.query('SELECT id FROM lab.execution_jobs')).rows,
+  ).toEqual([{ id: original }]);
+});
+test('an admission blocked by replay checks the newly committed generation and records the old event as stale', async () => {
+  const record = await schedulingRecord();
+  const body = JSON.parse(record.value);
+  await migrator.query('BEGIN');
+  await migrator.query('SELECT id FROM lab.tickets WHERE id=$1 FOR UPDATE', [
+    body.ticketId,
+  ]);
+  const pending = admissions().admit(record);
+  const settled = Promise.allSettled([pending]);
+  try {
+    const deadline = performance.now() + 1500;
+    let blocked = false;
+    while (performance.now() < deadline) {
+      blocked =
+        (
+          await admin.query(
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name='scheduling-admission-test' AND wait_event_type='Lock'",
+          )
+        ).rows[0].n > 0;
+      if (blocked) break;
+      await delay(20);
+    }
+    expect(blocked).toBe(true);
+    const event = {
+      ...body,
+      eventId: randomUUID(),
+      generation: 2,
+      data: { reason: 'replayed' },
+    };
+    const payload = JSON.stringify(event);
+    await migrator.query(
+      "INSERT INTO lab.ticket_executions(tenant_id,ticket_id,generation,status,scheduling_reason,requested_by,correlation_id,scheduling_event_id) VALUES($1,$2,2,'queued','replayed',$3,$4,$5)",
+      [tenant, body.ticketId, principal, body.correlationId, event.eventId],
+    );
+    await migrator.query(
+      "INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,2,'ticket.execution.requested',1,$4,$5)",
+      [
+        event.eventId,
+        tenant,
+        body.ticketId,
+        payload,
+        createHash('sha256').update(payload).digest(),
+      ],
+    );
+    await migrator.query(
+      'UPDATE lab.tickets SET current_generation=2 WHERE id=$1',
+      [body.ticketId],
+    );
+    await migrator.query('COMMIT');
+    expect(await pending).toEqual({ disposition: 'stale' });
+    expect(await admissionCounts()).toEqual([1, 0, 0]);
+  } finally {
+    await migrator.query('ROLLBACK');
+    await settled;
+  }
+});
+test('a terminal execution without an existing job is never re-enqueued by delivery', async () => {
+  const record = await schedulingRecord();
+  await migrator.query("UPDATE lab.ticket_executions SET status='failed'");
+  expect(await admissions().admit(record)).toEqual({
+    disposition: 'quarantined',
+    reason: 'EXECUTION_NOT_QUEUED',
+  });
+  expect(await admissionCounts()).toEqual([0, 0, 1]);
+});
+test('worker admission privileges deny ticket content/pointer changes and ledger mutation', async () => {
+  const record = await schedulingRecord();
+  await admissions().admit(record);
+  const client = await workerPool.connect();
+  try {
+    await client.query('SET ROLE lab_worker');
+    for (const sql of [
+      'SELECT message FROM lab.tickets',
+      'SELECT secret_digest FROM lab.auth_credentials',
+      'UPDATE lab.tickets SET current_generation=2',
+      'SELECT payload FROM lab.outbox_events',
+      'DELETE FROM lab.consumer_inbox',
+      "UPDATE lab.consumer_inbox SET disposition='stale'",
+      'DELETE FROM lab.execution_jobs',
+      'UPDATE lab.execution_jobs SET attempt_count=1',
+      'DELETE FROM lab.event_quarantine',
+      "UPDATE lab.event_quarantine SET reason='INVALID_ENVELOPE'",
+    ])
+      await expect(client.query(sql)).rejects.toMatchObject({ code: '42501' });
+    await expect(
+      client.query('UPDATE lab.tickets SET id=$1', [randomUUID()]),
+    ).rejects.toMatchObject({ code: '23503' });
+    await expect(
+      client.query(
+        'INSERT INTO lab.execution_jobs(id,tenant_id,ticket_id,generation,consumer_name,source_event_id,max_attempts) SELECT id,tenant_id,ticket_id,generation,consumer_name,source_event_id,100 FROM lab.execution_jobs',
+      ),
+    ).rejects.toMatchObject({ code: '42501' });
+  } finally {
+    await client.query('RESET ROLE');
+    client.release();
+  }
+  expect(await admissionCounts()).toEqual([1, 1, 0]);
+});
+test('a second event cannot replace an existing job after its execution becomes terminal', async () => {
+  const record = await schedulingRecord();
+  await admissions().admit(record);
+  const original = (
+    await migrator.query('SELECT id,source_event_id FROM lab.execution_jobs')
+  ).rows;
+  await migrator.query("UPDATE lab.ticket_executions SET status='failed'");
+  expect(
+    await admissions().admit(changedEvent(record, { eventId: randomUUID() })),
+  ).toEqual({ disposition: 'duplicate-generation' });
+  expect(
+    (await migrator.query('SELECT id,source_event_id FROM lab.execution_jobs'))
+      .rows,
+  ).toEqual(original);
+  expect(await admissionCounts()).toEqual([2, 1, 0]);
+});
+test('job references cannot combine one admitted event with a different tenant execution', async () => {
+  const first = await schedulingRecord();
+  const second = await schedulingRecord({
+    tenantId: otherTenant,
+    principalId: otherPrincipal,
+  });
+  await admissions().admit(first);
+  const client = await workerPool.connect();
+  try {
+    await client.query('SET ROLE lab_worker');
+    await expect(
+      client.query(
+        'INSERT INTO lab.execution_jobs(id,tenant_id,ticket_id,generation,consumer_name,source_event_id) VALUES($1,$2,$3,1,$4,$5)',
+        [
+          randomUUID(),
+          otherTenant,
+          JSON.parse(second.value).ticketId,
+          'ticket-scheduler.v1',
+          JSON.parse(first.value).eventId,
+        ],
+      ),
+    ).rejects.toMatchObject({ code: '23503' });
+  } finally {
+    await client.query('RESET ROLE');
+    client.release();
+  }
+  expect(await admissionCounts()).toEqual([1, 1, 0]);
+});
 function relay(publisher, source = publications()) {
   const { OutboxRelay } = require('../../apps/worker/dist/outbox-relay.js');
   return new OutboxRelay(source, publisher);

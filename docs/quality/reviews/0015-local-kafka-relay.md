@@ -1,6 +1,6 @@
 # Real local Kafka outbox relay
 
-Status: implementation prepared under owner-approved ADR-0006; not committed or pushed. Base `587f3bb` contains the approved SQL publication protocol. Proposed commit: `feat: publish outbox events through an opt-in Kafka relay`.
+Status: exact implementation patch approved by the owner and committed as `4723309`; not pushed. Base `587f3bb` contains the approved SQL publication protocol. Proposed commit: `feat: publish outbox events through an opt-in Kafka relay`.
 
 ## Purpose and affected files
 

@@ -1,6 +1,6 @@
 # ADR-0006: Integrate the evaluated client into an opt-in local outbox relay
 
-Status: bounded local application-client integration explicitly approved by the owner on 2026-11-20. The implementation is prepared for exact-patch review before commit; [review 0015](../quality/reviews/0015-local-kafka-relay.md) records actual evidence. ADR-0005 authorized only the experiment; approval of its test patch did not adopt the SDK in applications.
+Status: bounded local application-client integration explicitly approved by the owner on 2026-11-20. The exact implementation patch was approved and committed as `4723309`; [review 0015](../quality/reviews/0015-local-kafka-relay.md) records actual evidence. ADR-0005 authorized only the experiment; approval of its test patch did not adopt the SDK in applications.
 
 ## Context and decision
 

@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: authenticated `POST /v1/tickets` is committed. `GET /v1/tickets/{ticketId}` for queued/processing state is locally verified and prepared for [exact-patch review](../quality/reviews/0013-ticket-reads.md). Terminal-result reads, replay and application event handling remain planned; this is not evidence for the complete scenario table. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
+Status: authenticated `POST /v1/tickets` is committed. `GET /v1/tickets/{ticketId}` for queued/processing state is [committed](../quality/reviews/0013-ticket-reads.md). The [SQL admission boundary](../quality/reviews/0016-scheduling-admission.md) is prepared for review. Terminal-result reads, replay and native consumer wiring remain planned; this is not evidence for the complete scenario table. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
 
 ## Common HTTP rules
 

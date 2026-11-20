@@ -1,0 +1,94 @@
+name: Foundation checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    name: Format, types and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+
+  integration:
+    name: PostgreSQL, images, Compose and Kafka
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - name: Require Docker and Compose
+        run: |
+          docker info --format '{{.ServerVersion}}'
+          docker compose version
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:database
+      - run: npm run test:containers
+      - run: npm run test:compose
+      - run: npm run test:kafka
+
+  kafka-client:
+    name: Native client on Linux ARM64
+    needs: checks
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - name: Require native ARM64 Docker and Compose
+        run: |
+          test "$(docker info --format '{{.Architecture}}')" = aarch64
+          docker compose version
+      # Host runner uses only Node built-ins; Docker installs the isolated lockfile.
+      - run: npm run test:kafka-client
+
+  foundation:
+    name: Foundation gate
+    if: ${{ always() }}
+    needs: [checks, integration, kafka-client]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every foundation job to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          CLIENT_RESULT: ${{ needs.kafka-client.result }}
+        run: |
+          test "$CHECKS_RESULT" = success
+          test "$INTEGRATION_RESULT" = success
+          test "$CLIENT_RESULT" = success

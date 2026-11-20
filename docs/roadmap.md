@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phase 1 is in progress after architecture acceptance on 2026-11-16. Runtime, startup configuration, and application image slices are committed. Database identity foundation and persistent fictional identity seeding are committed; the Compose initialization foundation is committed; [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the approved [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) is prepared for exact-patch review. No full application acceptance scenario has passed yet.
+Status: phase 1 is in progress after architecture acceptance on 2026-11-16. Runtime, startup configuration, and application image slices are committed. Database identity foundation and persistent fictional identity seeding are committed; the Compose initialization foundation is committed; [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) and foundation CI are committed. The first phase-2 slice, [atomic ticket submission](quality/reviews/0011-ticket-submission.md), is prepared for review without a public HTTP route. No full application acceptance scenario has passed yet.
 
 ## Phase 0: architecture review
 

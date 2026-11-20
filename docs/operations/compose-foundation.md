@@ -72,7 +72,7 @@ After building the reviewed relay patch, enable real outbox publication explicit
 docker compose --profile messaging up --build --detach --wait --wait-timeout 180
 ```
 
-The separate `relay` entry point polls one leased event at a time, sends its exact stored bytes to the fixed Kafka topic with ticket ID as key, and marks publication only after broker acknowledgement. It uses only its read-only relay-password volume and the restricted `lab_relay` role. The default `worker` remains idle. No consumer or executor is enabled, so published tickets remain queued. API readiness still depends only on PostgreSQL/Redis.
+The separate `relay` entry point polls one leased event at a time, sends its exact stored bytes to the fixed Kafka topic with ticket ID as key, and marks publication only after broker acknowledgement. It uses only its read-only relay-password volume and the restricted `lab_relay` role. The default `worker` remains idle. The consumer patch prepared for review below adds durable job admission; no executor is enabled, so published/admitted tickets remain queued. API readiness still depends only on PostgreSQL/Redis.
 
 Native downloads are checksum-pinned for Node 24 ABI 137 on Linux glibc arm64/amd64; npm lifecycle scripts remain disabled. The relay-specific build stage fails on an unsupported artifact/platform without changing the default API/idle-worker build path. Build downloads need network access. This trusted local profile uses the existing plaintext internal broker, without production TLS/ACL or high availability claims.
 
@@ -88,3 +88,19 @@ docker compose --profile messaging down
 ```
 
 `--wait` verifies dependency gates but is not a relay-delivery readiness probe. See [review 0015](../quality/reviews/0015-local-kafka-relay.md) for actual platform, failure and delivery evidence. Using the same profile when stopping/removing the stack includes its relay container. Volumes are retained by the operational `down` command.
+
+## Opt-in scheduling consumer
+
+The implementation prepared under approved ADR-0007 adds `consumer` to the same `messaging` profile. It uses only `/run/lab/worker/password` through its read-only worker-password volume and the restricted `lab_worker` role. It admits each scheduling record transactionally before explicitly committing its next Kafka offset. Duplicate event identities/generations cannot create duplicate jobs; invalid events must enter durable quarantine first.
+
+A PostgreSQL outage keeps the current callback pending and prevents later records from advancing past it. Ambiguous offset-commit failure stops the process; restart the consumer after correcting the dependency with `docker compose --profile messaging up --detach --no-deps consumer`. Broker redelivery uses the existing inbox/job identity. The SDK has no implemented `stop()` method, so shutdown interrupts new admissions and calls `disconnect()` outside the message callback, with a 12-second process deadline inside Compose's 15-second grace. A forced deadline exit may leave an accepted SQL write or broker commit uncertain; redelivery remains safe.
+
+The SDK uses Number internally for offsets. The adapter refuses unsafe current/next offsets before SQL or acknowledgement; the SQL bigint range alone is not a claim of full SDK precision. Fetch/cache settings are bounded, but their limits are not a measured minimum memory requirement. Consumer startup/liveness is not a delivery-readiness probe.
+
+```sh
+npm run test:consumer
+# Optional alternate-platform client execution; Docker Desktop may emulate it.
+CONSUMER_TEST_PLATFORM=linux/amd64 npm run test:consumer
+```
+
+The smoke suite covers real HTTP -> relay -> consumer -> durable job, independent group-offset inspection, duplicate identities, quarantine, PostgreSQL outage, shutdown, and a host-killed SQL-before-offset checkpoint during rebalance. Test actors/producer fixtures run only in disposable containers and are not copied into application images. See [review 0017](../quality/reviews/0017-local-scheduling-consumer.md). This adds no executor, answer/result generation or replay.

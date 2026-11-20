@@ -1,6 +1,6 @@
 # Atomic scheduling admission
 
-Status: prepared for exact-patch review under the accepted SQL handoff architecture in ADR-0001/0002. Not committed or pushed. Base `4723309` contains the approved real publisher. Proposed commit: `feat: add atomic inbox and scheduling admission`.
+Status: exact implementation patch approved, committed as `5acb67d` and pushed under the accepted SQL handoff architecture in ADR-0001/0002. Base `4723309` contains the approved real publisher. Proposed commit: `feat: add atomic inbox and scheduling admission`.
 
 ## Purpose and affected files
 
@@ -32,6 +32,6 @@ Red: after PostgreSQL bootstrap succeeded, the first admission test failed becau
 
 ## Remaining boundary
 
-The integration inputs are exact submitted-event fixtures passed directly into admission, not Kafka consumer callbacks. No current test establishes committed broker offsets, rebalance ordering or a complete ticket workflow. The existing real publisher remains available, and tickets remain queued. The next slice requires explicit review of [ADR-0007](../../adr/0007-local-scheduling-consumer.md) because ADR-0006 adopted the native client solely for publication.
+The integration inputs are exact submitted-event fixtures passed directly into admission, not Kafka consumer callbacks. No current test establishes committed broker offsets, rebalance ordering or a complete ticket workflow. The existing real publisher remains available, and tickets remain queued. The owner subsequently approved [ADR-0007](../../adr/0007-local-scheduling-consumer.md); its native-consumer evidence belongs to [review 0017](0017-local-scheduling-consumer.md).
 
 The complete implementation patch, including new files, needs owner approval under [AGENTS.md](../../../AGENTS.md) before commit. Consumer architecture approval is separate from this SQL commit and from its future exact implementation patch. Neither authorizes push or release.

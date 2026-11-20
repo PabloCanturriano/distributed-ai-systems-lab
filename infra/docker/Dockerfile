@@ -58,6 +58,9 @@ FROM worker AS relay
 COPY --from=relay-dependencies /app/node_modules ./node_modules
 CMD ["node", "apps/worker/dist/relay-main.js"]
 
+FROM relay AS consumer
+CMD ["node", "apps/worker/dist/consumer-main.js"]
+
 FROM manifests AS database-build
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY tsconfig.base.json ./

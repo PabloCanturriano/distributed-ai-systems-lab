@@ -2,7 +2,32 @@ const {
   loadApiConfiguration,
   loadWorkerConfiguration,
   loadRelayConfiguration,
+  loadConsumerConfiguration,
 } = require('@lab/configuration');
+
+test('consumer uses its own validated local endpoints', () => {
+  expect(loadConsumerConfiguration({})).toEqual({
+    mode: 'local',
+    postgres: { host: 'postgres', port: 5432 },
+    kafka: { host: 'kafka', port: 9092 },
+  });
+  expect(
+    loadConsumerConfiguration({
+      CONSUMER_KAFKA_HOST: '::1',
+      CONSUMER_KAFKA_PORT: '9093',
+    }).kafka,
+  ).toEqual({ host: '::1', port: 9093 });
+});
+test.each([
+  { APP_MODE: 'production' },
+  { CONSUMER_PG_PORT: '0' },
+  { CONSUMER_KAFKA_PORT: '65536' },
+  { CONSUMER_KAFKA_HOST: 'fictional-private-user@broker' },
+])('consumer rejects invalid settings with a fixed error', (environment) => {
+  expect(() => loadConsumerConfiguration(environment)).toThrow(
+    /^Invalid consumer configuration$/,
+  );
+});
 
 test('relay selects bounded local endpoints independently of the idle worker', () => {
   expect(loadRelayConfiguration({})).toEqual({

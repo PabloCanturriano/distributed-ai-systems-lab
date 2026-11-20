@@ -22,7 +22,8 @@
     "test:compose": "node scripts/compose-smoke.mjs",
     "test:kafka": "node scripts/kafka-smoke.mjs",
     "test:kafka-client": "node scripts/kafka-client-smoke.mjs",
-    "test:relay": "node scripts/relay-smoke.mjs"
+    "test:relay": "node scripts/relay-smoke.mjs",
+    "test:consumer": "node scripts/consumer-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

@@ -101,3 +101,25 @@ export function loadRelayConfiguration(environment: Environment) {
     },
   });
 }
+
+const consumerEnvironment = workerEnvironment.extend({
+  CONSUMER_PG_HOST: dependencyHost.default('postgres'),
+  CONSUMER_PG_PORT: dependencyPort(5432),
+  CONSUMER_KAFKA_HOST: dependencyHost.default('kafka'),
+  CONSUMER_KAFKA_PORT: dependencyPort(9092),
+});
+export function loadConsumerConfiguration(environment: Environment) {
+  const result = consumerEnvironment.safeParse(environment);
+  if (!result.success) throw new Error('Invalid consumer configuration');
+  return Object.freeze({
+    mode: result.data.APP_MODE,
+    postgres: {
+      host: result.data.CONSUMER_PG_HOST,
+      port: result.data.CONSUMER_PG_PORT,
+    },
+    kafka: {
+      host: result.data.CONSUMER_KAFKA_HOST,
+      port: result.data.CONSUMER_KAFKA_PORT,
+    },
+  });
+}

@@ -1,12 +1,12 @@
 # ADR-0007: Integrate the native client with durable scheduling admission
 
-Status: proposed for explicit owner architecture review. ADR-0006 adopted the native SDK only for publication. This document does not activate or authorize application consumption by itself.
+Status: bounded native-consumer architecture explicitly approved by the owner on 2026-11-20. The implementation is prepared for exact-patch review; [review 0017](../quality/reviews/0017-local-scheduling-consumer.md) records evidence. ADR-0006 adopted the SDK only for publication; this approval extends it to the consumer described here.
 
-## Context and proposed decision
+## Context and decision
 
 [ADR-0001](0001-durable-ai-execution.md) approves the inbox/job handoff. Its [SQL implementation](../quality/reviews/0016-scheduling-admission.md) prepares durable admission independently of broker callbacks. The remaining client choice is to extend `@confluentinc/kafka-javascript` 1.11.0 to a local consumer, using the already pinned native artifacts and the promisified API. Recheck metadata/advisories before implementation; a changed candidate requires review.
 
-## Bounded implementation after approval
+## Approved bounded implementation
 
 - Add a separate worker scheduling-consumer entry point and an opt-in service under the existing `messaging` profile. Keep the default worker idle and leave API readiness unchanged. Use only its read-only worker-password volume, `lab_worker_login`/`lab_worker`, non-root/read-only execution, dropped capabilities and the backend network. No host ports, Docker socket, raw demo credentials or new public API.
 - Subscribe only to `tickets.execution-requested.v1`, with stable group ID `lab-ticket-scheduler-v1` and database consumer identity `ticket-scheduler.v1`. Disable automatic commits. Start with one callback in flight across partitions and bounded fetch/cache settings; do not run an executor in the callback.

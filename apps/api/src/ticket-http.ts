@@ -1,14 +1,16 @@
-import { Controller, Inject, Post, Req, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { TicketAccessError, type TicketService } from './ticket-access';
 import { TicketSubmissionError } from './ticket-submission';
+import { TicketReadError } from './ticket-read';
 
 export const TICKET_SERVICE = Symbol('ticket-service');
 const messages = {
   INVALID_REQUEST: [400, 'Request is invalid.'],
   UNAUTHENTICATED: [401, 'Authentication is required.'],
   FORBIDDEN: [403, 'This operation is not permitted.'],
+  NOT_FOUND: [404, 'Ticket not found.'],
   IDEMPOTENCY_CONFLICT: [
     409,
     'This key was already used with different input.',
@@ -97,28 +99,12 @@ export class TicketController {
     @Req() request: IncomingMessage,
     @Res() response: ServerResponse,
   ): Promise<void> {
-    const requestId = randomUUID();
-    response.setHeader('X-Request-Id', requestId);
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    const requestId = this.headers(response);
     try {
-      if (!this.service) throw new TicketAccessError('DEPENDENCY_UNAVAILABLE');
-      await this.service.checkIngress(
-        request.socket.remoteAddress ?? 'unknown',
-      );
-      if (
-        request.rawHeaders.filter(
-          (value, index) =>
-            index % 2 === 0 && value.toLowerCase() === 'authorization',
-        ).length > 1
-      )
-        throw new TicketAccessError('UNAUTHENTICATED');
-      const identity = await this.service.authenticate(
-        request.headers.authorization,
-      );
+      const { service, identity } = await this.identify(request);
       if (!['requester', 'operator'].includes(identity.role))
         throw new RequestError('FORBIDDEN');
-      await this.service.checkSubmissionLimit(identity);
+      await service.checkSubmissionLimit(identity);
       if (
         request.rawHeaders.filter(
           (value, index) =>
@@ -127,7 +113,7 @@ export class TicketController {
       )
         throw new RequestError('INVALID_REQUEST');
       const body = await jsonBody(request);
-      const receipt = await this.service.submit({
+      const receipt = await service.submit({
         tenantId: identity.tenantId,
         principalId: identity.principalId,
         requestId,
@@ -138,22 +124,68 @@ export class TicketController {
       response.setHeader('Location', receipt.statusUrl);
       response.end(JSON.stringify(receipt));
     } catch (error) {
-      const code =
-        error instanceof RequestError ||
-        error instanceof TicketAccessError ||
-        error instanceof TicketSubmissionError
-          ? error.code
-          : 'INTERNAL_ERROR';
-      const [status, message] = messages[code];
-      response.statusCode = status;
-      response.setHeader('Connection', 'close');
-      if (code === 'UNAUTHENTICATED')
-        response.setHeader('WWW-Authenticate', 'Bearer');
-      if (code === 'DEPENDENCY_UNAVAILABLE')
-        response.setHeader('Retry-After', '1');
-      if (code === 'RATE_LIMITED' && error instanceof TicketAccessError)
-        response.setHeader('Retry-After', String(error.retryAfter ?? 1));
-      response.end(JSON.stringify({ error: { code, message, requestId } }));
+      this.failure(response, error, requestId);
     }
+  }
+  @Get(':ticketId')
+  async read(
+    @Req() request: IncomingMessage,
+    @Res() response: ServerResponse,
+    @Param('ticketId') ticketId: string,
+  ): Promise<void> {
+    const requestId = this.headers(response);
+    try {
+      const { service, identity } = await this.identify(request);
+      await service.checkReadLimit(identity);
+      const ticket = await service.getTicket(identity, ticketId);
+      response.statusCode = 200;
+      response.end(JSON.stringify(ticket));
+    } catch (error) {
+      this.failure(response, error, requestId);
+    }
+  }
+  private headers(response: ServerResponse): string {
+    const requestId = randomUUID();
+    response.setHeader('X-Request-Id', requestId);
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return requestId;
+  }
+  private async identify(request: IncomingMessage) {
+    const service = this.service;
+    if (!service) throw new TicketAccessError('DEPENDENCY_UNAVAILABLE');
+    await service.checkIngress(request.socket.remoteAddress ?? 'unknown');
+    if (
+      request.rawHeaders.filter(
+        (value, index) =>
+          index % 2 === 0 && value.toLowerCase() === 'authorization',
+      ).length > 1
+    )
+      throw new TicketAccessError('UNAUTHENTICATED');
+    const identity = await service.authenticate(request.headers.authorization);
+    return { service, identity };
+  }
+  private failure(
+    response: ServerResponse,
+    error: unknown,
+    requestId: string,
+  ): void {
+    const code =
+      error instanceof RequestError ||
+      error instanceof TicketAccessError ||
+      error instanceof TicketSubmissionError ||
+      error instanceof TicketReadError
+        ? error.code
+        : 'INTERNAL_ERROR';
+    const [status, message] = messages[code];
+    response.statusCode = status;
+    response.setHeader('Connection', 'close');
+    if (code === 'UNAUTHENTICATED')
+      response.setHeader('WWW-Authenticate', 'Bearer');
+    if (code === 'DEPENDENCY_UNAVAILABLE')
+      response.setHeader('Retry-After', '1');
+    if (code === 'RATE_LIMITED' && error instanceof TicketAccessError)
+      response.setHeader('Retry-After', String(error.retryAfter ?? 1));
+    response.end(JSON.stringify({ error: { code, message, requestId } }));
   }
 }

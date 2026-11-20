@@ -10,6 +10,31 @@ const manifest = JSON.parse(
 const credential = (alias) =>
   manifest.credentials.find((entry) => entry.alias === alias);
 const requester = credential('harbor.requester');
+async function read(
+  path,
+  identity = credential('harbor.reader'),
+  headers = {},
+) {
+  const result = await fetch(`http://api:3000${path}`, {
+    headers: {
+      authorization: `Bearer ${identity.lookupId}.${identity.secret}`,
+      ...headers,
+    },
+    signal: AbortSignal.timeout(5000),
+  });
+  const raw = await result.text();
+  for (const entry of manifest.credentials)
+    assert.equal(
+      raw.includes(entry.secret),
+      false,
+      'response exposed credential material',
+    );
+  assert.equal(result.headers.get('cache-control'), 'no-store');
+  const body = JSON.parse(raw);
+  if (result.status !== 200)
+    assert.equal(body.error.requestId, result.headers.get('x-request-id'));
+  return { status: result.status, body };
+}
 async function post({
   identity = requester,
   key = randomUUID(),
@@ -57,6 +82,47 @@ if (mode === 'basic') {
   const key = randomUUID();
   const first = await post({ key });
   assert.equal(first.status, 202);
+  for (const alias of [
+    'harbor.reader',
+    'harbor.requester',
+    'harbor.operator',
+  ]) {
+    const state = await read(first.body.statusUrl, credential(alias));
+    assert.equal(state.status, 200);
+    assert.deepEqual(
+      Object.keys(state.body).sort(),
+      [
+        'ticketId',
+        'generation',
+        'status',
+        'createdAt',
+        'updatedAt',
+        'result',
+        'failure',
+      ].sort(),
+    );
+    assert.equal(state.body.ticketId, first.body.ticketId);
+    assert.equal(state.body.status, 'queued');
+    assert.equal(state.body.generation, 1);
+    assert.equal(state.body.result, null);
+    assert.equal(state.body.failure, null);
+  }
+  const foreign = await read(
+    first.body.statusUrl,
+    credential('summit.reader'),
+    { 'x-tenant-id': 'a1000000-0000-4000-8000-000000000001' },
+  );
+  const missing = await read(
+    `/v1/tickets/${randomUUID()}`,
+    credential('summit.reader'),
+  );
+  assert.equal(foreign.status, 404);
+  assert.equal(missing.status, 404);
+  assert.deepEqual(
+    { ...foreign.body.error, requestId: null },
+    { ...missing.body.error, requestId: null },
+  );
+  assert.equal((await read('/v1/tickets/invalid-id')).status, 400);
   const repeat = await post({
     key,
     body: { message: '  Fictional support question\n' },
@@ -132,6 +198,16 @@ if (mode === 'basic') {
     assert.equal(reply.body.error.code, 'RATE_LIMITED');
     assert.ok(Number(reply.retryAfter) >= 1 && Number(reply.retryAfter) <= 60);
   }
+  assert.equal(
+    (
+      await read(
+        replies.find((reply) => reply.status === 202).body.statusUrl,
+        requester,
+      )
+    ).status,
+    200,
+    'reads must remain available after tenant submission quota is exhausted',
+  );
 } else if (mode === 'ingress-limit') {
   const statuses = [];
   for (let i = 0; i < 301; i++)
@@ -149,14 +225,25 @@ if (mode === 'basic') {
   const reply = await post();
   assert.equal(reply.status, 429);
   assert.equal(reply.body.error.code, 'RATE_LIMITED');
+  assert.equal(
+    (await read(`/v1/tickets/${randomUUID()}`, requester)).status,
+    429,
+  );
 } else if (mode === 'unavailable') {
   const reply = await post();
   assert.equal(reply.status, 503);
   assert.equal(reply.body.error.code, 'DEPENDENCY_UNAVAILABLE');
+  const state = await read(`/v1/tickets/${randomUUID()}`, requester);
+  assert.equal(state.status, 503);
+  assert.equal(state.body.error.code, 'DEPENDENCY_UNAVAILABLE');
 } else if (mode === 'revoked') {
   const reply = await post({ key: 'revocation-retry' });
   assert.equal(reply.status, 401);
   assert.equal(reply.body.error.code, 'UNAUTHENTICATED');
+  assert.equal(
+    (await read(`/v1/tickets/${randomUUID()}`, requester)).status,
+    401,
+  );
 } else if (mode === 'accepted') {
   assert.equal((await post({ key: process.argv[2] })).status, 202);
 } else throw new Error('Unknown test scenario');

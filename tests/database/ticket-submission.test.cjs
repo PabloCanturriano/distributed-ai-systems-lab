@@ -151,6 +151,140 @@ function store(source = pool) {
   } = require('../../apps/api/dist/ticket-submission.js');
   return new TicketSubmissions(source);
 }
+function reads() {
+  const { TicketReads } = require('../../apps/api/dist/ticket-read.js');
+  return new TicketReads(pool);
+}
+test('a same-tenant reader sees only the current queued status and no internal or message fields', async () => {
+  const receipt = await store().submit(input());
+  const result = await reads().get({
+    tenantId: tenant,
+    principalId: reader,
+    ticketId: receipt.ticketId,
+  });
+  expect(result).toEqual({
+    ticketId: receipt.ticketId,
+    generation: 1,
+    status: 'queued',
+    createdAt: expect.any(String),
+    updatedAt: expect.any(String),
+    result: null,
+    failure: null,
+  });
+  expect(Number.isFinite(Date.parse(result.createdAt))).toBe(true);
+  expect(await counts()).toEqual([1, 1, 1, 1]);
+});
+test('foreign and missing ticket IDs have the same non-disclosing result', async () => {
+  const receipt = await store().submit(input());
+  for (const ticketId of [receipt.ticketId, randomUUID()])
+    await expect(
+      reads().get({
+        tenantId: otherTenant,
+        principalId: otherPrincipal,
+        ticketId,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: 'NOT_FOUND' });
+});
+test('read membership and identifier checks cannot be bypassed with caller-provided scope', async () => {
+  const receipt = await store().submit(input());
+  await expect(
+    reads().get({
+      tenantId: tenant,
+      principalId: otherPrincipal,
+      ticketId: receipt.ticketId,
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  await expect(
+    reads().get({
+      tenantId: tenant,
+      principalId: reader,
+      ticketId: 'invalid-id',
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  await migrator.query(
+    'UPDATE lab.principals SET disabled_at=CURRENT_TIMESTAMP WHERE id=$1',
+    [reader],
+  );
+  await expect(
+    reads().get({
+      tenantId: tenant,
+      principalId: reader,
+      ticketId: receipt.ticketId,
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
+test('reads follow the current-generation pointer without returning the previous lifecycle row', async () => {
+  const receipt = await store().submit(input());
+  const eventId = randomUUID();
+  const correlationId = randomUUID();
+  const payload = JSON.stringify({
+    eventId,
+    type: 'ticket.execution.requested',
+    version: 1,
+    occurredAt: new Date().toISOString(),
+    tenantId: tenant,
+    ticketId: receipt.ticketId,
+    generation: 2,
+    correlationId,
+    causationId: correlationId,
+    data: { reason: 'replayed' },
+  });
+  await migrator.query('BEGIN');
+  try {
+    await migrator.query(
+      "INSERT INTO lab.ticket_executions(tenant_id,ticket_id,generation,status,scheduling_reason,requested_by,correlation_id,scheduling_event_id) VALUES($1,$2,2,'processing','replayed',$3,$4,$5)",
+      [tenant, receipt.ticketId, operator, correlationId, eventId],
+    );
+    await migrator.query(
+      'INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,2,$4,1,$5,$6)',
+      [
+        eventId,
+        tenant,
+        receipt.ticketId,
+        'ticket.execution.requested',
+        payload,
+        createHash('sha256').update(payload).digest(),
+      ],
+    );
+    await migrator.query(
+      'UPDATE lab.tickets SET current_generation=2,updated_at=CURRENT_TIMESTAMP WHERE id=$1',
+      [receipt.ticketId],
+    );
+    await migrator.query('COMMIT');
+  } catch (error) {
+    await migrator.query('ROLLBACK');
+    throw error;
+  }
+  expect(
+    await reads().get({
+      tenantId: tenant,
+      principalId: reader,
+      ticketId: receipt.ticketId,
+    }),
+  ).toMatchObject({
+    generation: 2,
+    status: 'processing',
+    result: null,
+    failure: null,
+  });
+});
+test.each(['completed', 'failed'])(
+  'terminal state %s without result storage fails safely instead of fabricating output',
+  async (status) => {
+    const receipt = await store().submit(input());
+    await migrator.query(
+      'UPDATE lab.ticket_executions SET status=$1 WHERE ticket_id=$2',
+      [status, receipt.ticketId],
+    );
+    await expect(
+      reads().get({
+        tenantId: tenant,
+        principalId: reader,
+        ticketId: receipt.ticketId,
+      }),
+    ).rejects.toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+  },
+);
 
 async function asApi(action) {
   const client = await pool.connect();

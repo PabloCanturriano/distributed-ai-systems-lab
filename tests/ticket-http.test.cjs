@@ -5,6 +5,117 @@ const {
   TicketSubmissionError,
 } = require('../apps/api/dist/ticket-submission.js');
 const { request: httpRequest } = require('node:http');
+const { TicketReadError } = require('../apps/api/dist/ticket-read.js');
+
+test.each([
+  [new TicketReadError('NOT_FOUND'), 404, 'NOT_FOUND'],
+  [new TicketReadError('INVALID_REQUEST'), 400, 'INVALID_REQUEST'],
+  [
+    new TicketReadError('DEPENDENCY_UNAVAILABLE'),
+    503,
+    'DEPENDENCY_UNAVAILABLE',
+  ],
+  [new Error('fictional-private-read-detail'), 500, 'INTERNAL_ERROR'],
+])(
+  'read failures preserve the safe response contract: %s',
+  async (error, status, code) => {
+    await fixture(
+      {
+        async checkReadLimit() {},
+        async getTicket() {
+          throw error;
+        },
+      },
+      async (url) => {
+        const response = await fetch(`${url}/v1/tickets/${randomUUID()}`);
+        expect(response.status).toBe(status);
+        const body = await response.json();
+        expect(body.error.code).toBe(code);
+        expect(body.error.requestId).toBe(response.headers.get('x-request-id'));
+        expect(response.headers.get('cache-control')).toBe('no-store');
+        expect(JSON.stringify(body)).not.toContain('fictional-private');
+      },
+    );
+  },
+);
+test('read requests enforce authentication and principal limits before lookup', async () => {
+  for (const failure of [
+    new TicketAccessError('UNAUTHENTICATED'),
+    new TicketAccessError('RATE_LIMITED', 7),
+  ]) {
+    let lookedUp = false;
+    await fixture(
+      {
+        async authenticate() {
+          if (failure.code === 'UNAUTHENTICATED') throw failure;
+          return {
+            tenantId: randomUUID(),
+            principalId: randomUUID(),
+            role: 'reader',
+          };
+        },
+        async checkReadLimit() {
+          throw failure;
+        },
+        async getTicket() {
+          lookedUp = true;
+        },
+      },
+      async (url) => {
+        const response = await fetch(`${url}/v1/tickets/${randomUUID()}`);
+        expect(response.status).toBe(
+          failure.code === 'UNAUTHENTICATED' ? 401 : 429,
+        );
+        expect(lookedUp).toBe(false);
+      },
+    );
+  }
+});
+
+test('a reader can follow the receipt URL and receive the queued ticket with safe headers', async () => {
+  const ticketId = randomUUID();
+  const identity = {
+    tenantId: randomUUID(),
+    principalId: randomUUID(),
+    role: 'reader',
+  };
+  const ticket = {
+    ticketId,
+    generation: 1,
+    status: 'queued',
+    createdAt: '2026-11-20T00:00:00.000Z',
+    updatedAt: '2026-11-20T00:00:00.000Z',
+    result: null,
+    failure: null,
+  };
+  const service = {
+    async checkIngress() {},
+    async authenticate() {
+      return identity;
+    },
+    async checkReadLimit(value) {
+      expect(value).toEqual(identity);
+    },
+    async getTicket(value, id) {
+      expect(value).toEqual(identity);
+      expect(id).toBe(ticketId);
+      return ticket;
+    },
+  };
+  const app = await createApi(undefined, service);
+  try {
+    await app.listen(0, '127.0.0.1');
+    const response = await fetch(
+      `${await app.getUrl()}/v1/tickets/${ticketId}`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(ticket);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
+  } finally {
+    await app.close();
+  }
+});
 
 test('authenticated ticket submission returns a stable acceptance receipt and safe headers', async () => {
   const ticketId = randomUUID();

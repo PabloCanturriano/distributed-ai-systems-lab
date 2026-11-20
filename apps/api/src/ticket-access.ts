@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { TicketSubmissions, type TicketReceipt } from './ticket-submission';
+import { TicketReads, type TicketStatus } from './ticket-read';
 
 export interface TicketIdentity {
   tenantId: string;
@@ -25,6 +26,8 @@ export interface TicketService {
   checkIngress(peer: string): Promise<void>;
   authenticate(authorization: string | undefined): Promise<TicketIdentity>;
   checkSubmissionLimit(identity: TicketIdentity): Promise<void>;
+  checkReadLimit(identity: TicketIdentity): Promise<void>;
+  getTicket(identity: TicketIdentity, ticketId: string): Promise<TicketStatus>;
   submit(input: unknown): Promise<TicketReceipt>;
 }
 const lookupSchema = z.uuid();
@@ -34,11 +37,13 @@ const opaqueKey = (value: string) =>
 
 export class TicketAccess implements TicketService {
   private readonly submissions: TicketSubmissions;
+  private readonly reads: TicketReads;
   constructor(
     private readonly pool: Pick<Pool, 'connect'>,
     private readonly limits: SubmissionLimits,
   ) {
     this.submissions = new TicketSubmissions(pool);
+    this.reads = new TicketReads(pool);
   }
   checkIngress(peer: string): Promise<void> {
     return this.limits.consume([
@@ -56,6 +61,21 @@ export class TicketAccess implements TicketService {
   }
   submit(input: unknown): Promise<TicketReceipt> {
     return this.submissions.submit(input);
+  }
+  checkReadLimit(identity: TicketIdentity): Promise<void> {
+    return this.limits.consume([
+      {
+        key: `principal:${opaqueKey(`${identity.tenantId}:${identity.principalId}`)}`,
+        limit: 120,
+      },
+    ]);
+  }
+  getTicket(identity: TicketIdentity, ticketId: string): Promise<TicketStatus> {
+    return this.reads.get({
+      tenantId: identity.tenantId,
+      principalId: identity.principalId,
+      ticketId,
+    });
   }
 
   async authenticate(

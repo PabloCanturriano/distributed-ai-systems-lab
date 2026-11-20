@@ -1,6 +1,6 @@
 # Documentation map
 
-The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the Compose foundation is committed and [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the [client selection review](quality/reviews/0009-kafka-client-selection.md) proposes the next bounded slice; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
+The repository is in phase 1. Runtime, local startup configuration, and application images are implemented. Database foundation and persistent fictional identities are committed; the Compose foundation is committed and [API dependency readiness](quality/reviews/0007-api-readiness.md) is committed; the [Kafka foundation](quality/reviews/0008-kafka-foundation.md) is committed; the approved [client compatibility evaluation](quality/reviews/0010-kafka-client-compatibility.md) is prepared for exact-patch review; ticket-processing behavior remains proposed. The owner accepted the architecture baseline on 2026-11-16; phase 1 preparation is authorized. This is not an application release.
 
 ## Read in this order
 
@@ -13,6 +13,8 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 7. [Architecture review checklist](architecture/review.md): proposed decisions and implementation gate.
 
 ## Implementation preparation
+
+- [Kafka client compatibility](quality/reviews/0010-kafka-client-compatibility.md): isolated native packaging, manual-offset/redelivery/rebalance evidence, and remaining adoption limits.
 
 - [Kafka client selection](quality/reviews/0009-kafka-client-selection.md): maintenance findings, native packaging implications and a proposed compatibility gate.
 
@@ -66,4 +68,4 @@ The repository is in phase 1. Runtime, local startup configuration, and applicat
 
 ADRs were accepted on 2026-11-16. Updating or accepting a design record does not implement its controls or change non-documentation commit permissions.
 
-Proposed, not accepted: [ADR-0005](adr/0005-kafka-client-compatibility-gate.md) defines a bounded Confluent client compatibility evaluation before application messaging.
+Approved evaluation scope: [ADR-0005](adr/0005-kafka-client-compatibility-gate.md) defines a bounded Confluent client compatibility evaluation. Approval does not adopt a new application SDK or implement application messaging.

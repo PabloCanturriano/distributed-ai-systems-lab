@@ -1,6 +1,6 @@
 # ADR-0005: Evaluate the Confluent JavaScript client before application messaging
 
-Status: proposed on 2026-11-19; awaiting owner architecture review. ADR-0002 remains the accepted baseline until this proposal is approved. No dependency substitution is implemented.
+Status: bounded evaluation explicitly approved by the owner on 2026-11-19. The experimental implementation is prepared for exact-patch review; see [results](../quality/reviews/0010-kafka-client-compatibility.md). Application SDK adoption/wiring remains outside this approval.
 
 ## Context
 
@@ -8,13 +8,13 @@ The persistent Kafka 4.4.0 broker is implemented, but the application has no pro
 
 Confluent's client has a more recent stable release and documented Node 24 support, with additional native packaging costs. Changing the adapter's SDK warrants explicit architecture review rather than a silent dependency substitution.
 
-## Proposed decision
+## Approved evaluation scope
 
 Authorize a bounded compatibility slice evaluating `@confluentinc/kafka-javascript` 1.11.0 with its promisified API against the existing pinned Apache Kafka 4.4.0 and Node 24.22.3/Bookworm runtime. Recheck versions and advisories before resolving the experimental lockfile; any different candidate version must be explained in its review.
 
 Keep SDK types/configuration internal to a narrow messaging boundary. Preserve PostgreSQL as business source of truth, at-least-once delivery, sequential handling within each partition, and explicit offset commits after durable admission. An SDK's idempotent producer does not make the SQL/Kafka boundary or external effects exactly once.
 
-This approval would authorize preparing and verifying only the compatibility package/test harness and its necessary isolated build inputs. It does not authorize business application wiring or an implementation commit. After evidence review, document whether the candidate passed and retain or reopen this choice before implementing producer/consumer behavior.
+This approval authorizes preparing and verifying only the compatibility package/test harness and its necessary isolated build inputs. It does not authorize business application wiring or an implementation commit. After evidence review, document whether the candidate passed and retain or reopen this choice before implementing producer/consumer behavior.
 
 ## Bounded implementation and acceptance plan
 
@@ -40,6 +40,6 @@ Changing the broker version, implementing Kafka protocol support ourselves, or b
 
 ## Approval and evidence boundary
 
-The owner must approve this proposed client-selection change before code, dependencies or runtime configuration for the alternative client are prepared, under [AGENTS.md](../../AGENTS.md): “Do not introduce application code, scaffolding, dependencies, or runtime configuration until the owner has reviewed and approved the architecture.”
+The owner explicitly approved this bounded evaluation after the initial approval review blocked lockfile creation. The governing architecture gate is in [AGENTS.md](../../AGENTS.md): “Do not introduce application code, scaffolding, dependencies, or runtime configuration until the owner has reviewed and approved the architecture.”
 
 Approval authorizes the bounded preparation described above. The complete implementation patch, actual checks, findings and proposed commit message still require separate exact-patch approval. Push/merge/release authorization remains separate.

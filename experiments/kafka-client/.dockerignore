@@ -1,0 +1,6 @@
+**
+!package.json
+!package-lock.json
+!prepare-native.mjs
+!probe.mjs
+!consumer.mjs

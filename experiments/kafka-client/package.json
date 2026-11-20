@@ -1,0 +1,12 @@
+{
+  "name": "lab-kafka-client-compatibility",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.22.3 <25"
+  },
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "1.11.0"
+  }
+}

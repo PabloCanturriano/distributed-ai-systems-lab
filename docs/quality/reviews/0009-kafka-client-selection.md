@@ -50,3 +50,5 @@ The official release asset `confluent-kafka-javascript-v1.11.0-node-v137-linux-g
 Sources: [tagged release and assets](https://github.com/confluentinc/confluent-kafka-javascript/releases/tag/v1.11.0), [release metadata API](https://api.github.com/repos/confluentinc/confluent-kafka-javascript/releases/tags/v1.11.0), and the versioned registry metadata linked above. The version lookup still reports 1.11.0.
 
 Creating the experimental lockfile was rejected by automatic approval review because explicit owner approval of ADR-0005 was not evidenced. That operation was not executed; no lockfile was created and no client installation, load test or broker/client integration ran. Explicit architecture approval remains pending before that work resumes.
+
+Follow-up: the owner subsequently explicitly approved ADR-0005. The bounded experimental implementation and actual results are recorded in [review 0010](0010-kafka-client-compatibility.md); the preflight rejection above is resolved.

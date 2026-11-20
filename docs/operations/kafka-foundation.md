@@ -1,6 +1,6 @@
 # Local Kafka foundation
 
-Status: implementation prepared for exact-patch review. The broker and topic initializer are wired into Compose. The worker remains idle; no application Kafka client, outbox publisher, inbox, or execution loop is installed.
+Status: implementation approved and committed as `f679c74`. The broker and topic initializer are wired into Compose. The worker remains idle; no application Kafka client, outbox publisher, inbox, or execution loop is installed.
 
 ## Start and inspect
 

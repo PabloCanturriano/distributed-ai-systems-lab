@@ -40,3 +40,13 @@ Read-only queries performed:
 Metadata was retrieved successfully. Both candidate versions above were current in those responses on 2026-11-19. Package metadata sources: [KafkaJS registry document](https://registry.npmjs.org/kafkajs), [Confluent registry document](https://registry.npmjs.org/@confluentinc%2fkafka-javascript).
 
 Documentation validation covers relative links and whitespace. No new dependency audit, native artifact/security/license inventory, image scan, client build, broker/client integration, performance test or business acceptance scenario ran in this slice. Existing tests from review 0008 remain historical broker/foundation evidence; they are not relabeled as client results.
+
+## Artifact preflight on 2026-11-19
+
+Read-only inspection of the published 1.11.0 package verified its npm SHA-512 integrity value: `sha512-DKv7bvUiT60UlBEBNYq54v8kKaRlN/zMhZFTtkjm/qXDxiUSkiEP1JQRncr2I9QEa9Tq51kuDTyVnR4ZQFzmMw==`. The package carries its MIT license, KafkaJS/node-rdkafka notices and additional librdkafka component notices. This is an inventory observation, not a completed native/transitive license or security review.
+
+The official release asset `confluent-kafka-javascript-v1.11.0-node-v137-linux-glibc-arm64.tar.gz` was downloaded for inspection without execution. Its SHA-256 matched the GitHub release API digest: `8ce2595cfe62bae5fafd206ed78d1d8a8188e2019534b063f51710a8e7798384`. The archive includes the addon at `Release/confluent-kafka-javascript.node`, plus object/build files; a future build can select only the addon. Matching a digest from the same publisher checks artifact identity/integrity, not an independent signature or a vulnerability assessment.
+
+Sources: [tagged release and assets](https://github.com/confluentinc/confluent-kafka-javascript/releases/tag/v1.11.0), [release metadata API](https://api.github.com/repos/confluentinc/confluent-kafka-javascript/releases/tags/v1.11.0), and the versioned registry metadata linked above. The version lookup still reports 1.11.0.
+
+Creating the experimental lockfile was rejected by automatic approval review because explicit owner approval of ADR-0005 was not evidenced. That operation was not executed; no lockfile was created and no client installation, load test or broker/client integration ran. Explicit architecture approval remains pending before that work resumes.

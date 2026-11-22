@@ -242,6 +242,59 @@ try {
     'Invalid event was quarantined before its broker offset advanced',
   );
 
+  // Trusted operator exercises the new ownership protocol on the real
+  // consumer-created job; no executor polling loop is enabled by this probe.
+  const failJob = `import assert from 'node:assert/strict';import{createRequire}from'node:module';import{readFileSync}from'node:fs';const require=createRequire('/app/apps/worker/package.json');const{Pool}=require('pg');const{ExecutionOwnership}=require('./dist/execution-ownership.js');const pool=new Pool({host:'postgres',database:'lab',user:'lab_worker_login',password:readFileSync('/run/lab/worker/password','utf8'),max:1,connectionTimeoutMillis:1000,query_timeout:6000});pool.on('error',()=>{});try{const owner=new ExecutionOwnership(pool);const claim=await owner.claim();assert.equal(claim.ticketId,process.argv[1]);assert.equal(await owner.fail(claim.jobId,claim.attemptId),true);assert.equal(await owner.fail(claim.jobId,claim.attemptId),false);console.log(JSON.stringify({event:'ownership_failure_committed'}));}finally{await pool.end();}`;
+  assert.deepEqual(
+    JSON.parse((await oneShot('consumer', failJob, [firstId])).stdout),
+    { event: 'ownership_failure_committed' },
+  );
+  const failure = await wait(
+    async () =>
+      (
+        await query(
+          "SELECT payload FROM lab.outbox_events WHERE ticket_id=$1 AND type='ticket.execution.failed' AND published_at IS NOT NULL",
+          [firstId],
+        )
+      )[0],
+    'terminal notification relay acknowledgement',
+  );
+  const failureRecord = await compose([
+    'exec',
+    '-T',
+    '--env',
+    'KAFKA_HEAP_OPTS=-Xms32m -Xmx128m',
+    'kafka',
+    '/opt/kafka/bin/kafka-console-consumer.sh',
+    '--bootstrap-server',
+    'kafka:9092',
+    '--topic',
+    'tickets.execution-failed.v1',
+    '--from-beginning',
+    '--max-messages',
+    '1',
+    '--timeout-ms',
+    '15000',
+    '--command-property',
+    'enable.auto.commit=false',
+    '--formatter-property',
+    'print.key=true',
+    '--formatter-property',
+    'key.separator=|',
+  ]);
+  assert.equal(failureRecord.stdout.trim(), `${firstId}|${failure.payload}`);
+  assert.deepEqual(JSON.parse(failure.payload).data, {
+    failureCode: 'EXECUTION_FAILED',
+    attemptCount: 1,
+  });
+  assert.equal(
+    (await query('SELECT count(*)::int AS n FROM lab.execution_jobs'))[0].n,
+    1,
+  );
+  console.log(
+    'Consumer-created job ownership and atomic failure reached the real failure topic without rescheduling',
+  );
+
   await stopConsumer();
   await compose(['stop', 'relay']);
   const secondId = await submit(),
@@ -446,8 +499,8 @@ try {
     }
   }
   assert.ok(
-    (await query('SELECT status FROM lab.ticket_executions')).every(
-      (row) => row.status === 'queued',
+    (await query('SELECT ticket_id,status FROM lab.ticket_executions')).every(
+      (row) => row.status === (row.ticket_id === firstId ? 'failed' : 'queued'),
     ),
   );
   const captured = await compose(['logs', '--no-color']);
@@ -457,13 +510,14 @@ try {
     'consumer-private-question-fixture',
     firstEvent.value,
     fourthEvent.value,
+    failure.payload,
   ])
     assert.equal(logs.includes(value), false);
   const check = `import assert from 'node:assert/strict';import{readFileSync,existsSync}from'node:fs';const logs=readFileSync(0,'utf8');for(const role of ['admin','migrator','seed','api','worker','relay']){const p='/run/lab/'+role+'/password';if(existsSync(p))assert.equal(logs.includes(readFileSync(p,'utf8')),false);}const p='/run/lab/demo/identities/identities-v1.json';if(existsSync(p))for(const c of JSON.parse(readFileSync(p,'utf8')).credentials)assert.equal(logs.includes(c.secret),false);`;
   await oneShot('bootstrap', check, [], logs);
   await oneShot('seed', check, [], logs);
   console.log(
-    'Consumer isolation, safe logs, queued lifecycle and shutdown passed',
+    'Consumer isolation, safe logs, expected lifecycle and shutdown passed',
   );
 } finally {
   heldChild?.stdin.destroy();

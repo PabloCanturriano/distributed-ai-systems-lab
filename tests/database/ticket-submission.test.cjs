@@ -153,7 +153,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
+    'TRUNCATE lab.execution_attempts, lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
   );
   await migrator.query('UPDATE lab.principals SET disabled_at=NULL');
 });
@@ -650,7 +650,7 @@ test('worker admission privileges deny ticket content/pointer changes and ledger
       'DELETE FROM lab.consumer_inbox',
       "UPDATE lab.consumer_inbox SET disposition='stale'",
       'DELETE FROM lab.execution_jobs',
-      'UPDATE lab.execution_jobs SET attempt_count=1',
+      'UPDATE lab.execution_jobs SET source_event_id=gen_random_uuid()',
       'DELETE FROM lab.event_quarantine',
       "UPDATE lab.event_quarantine SET reason='INVALID_ENVELOPE'",
     ])

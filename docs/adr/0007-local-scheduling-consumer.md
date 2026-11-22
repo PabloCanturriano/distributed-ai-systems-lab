@@ -1,6 +1,6 @@
 # ADR-0007: Integrate the native client with durable scheduling admission
 
-Status: bounded native-consumer architecture explicitly approved by the owner on 2026-11-20. The implementation is prepared for exact-patch review; [review 0017](../quality/reviews/0017-local-scheduling-consumer.md) records evidence. ADR-0006 adopted the SDK only for publication; this approval extends it to the consumer described here.
+Status: bounded native-consumer architecture explicitly approved by the owner on 2026-11-20. The exact implementation was approved, committed as `df155ba` and pushed; [review 0017](../quality/reviews/0017-local-scheduling-consumer.md) records evidence. ADR-0006 adopted the SDK only for publication; this approval extends it to the consumer described here.
 
 ## Context and decision
 

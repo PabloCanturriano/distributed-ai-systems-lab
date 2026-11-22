@@ -91,7 +91,7 @@ docker compose --profile messaging down
 
 ## Opt-in scheduling consumer
 
-The implementation prepared under approved ADR-0007 adds `consumer` to the same `messaging` profile. It uses only `/run/lab/worker/password` through its read-only worker-password volume and the restricted `lab_worker` role. It admits each scheduling record transactionally before explicitly committing its next Kafka offset. Duplicate event identities/generations cannot create duplicate jobs; invalid events must enter durable quarantine first.
+The committed implementation under approved ADR-0007 adds `consumer` to the same `messaging` profile. It uses only `/run/lab/worker/password` through its read-only worker-password volume and the restricted `lab_worker` role. It admits each scheduling record transactionally before explicitly committing its next Kafka offset. Duplicate event identities/generations cannot create duplicate jobs; invalid events must enter durable quarantine first.
 
 A PostgreSQL outage keeps the current callback pending and prevents later records from advancing past it. Ambiguous offset-commit failure stops the process; restart the consumer after correcting the dependency with `docker compose --profile messaging up --detach --no-deps consumer`. Broker redelivery uses the existing inbox/job identity. The SDK has no implemented `stop()` method, so shutdown interrupts new admissions and calls `disconnect()` outside the message callback, with a 12-second process deadline inside Compose's 15-second grace. A forced deadline exit may leave an accepted SQL write or broker commit uncertain; redelivery remains safe.
 
@@ -104,3 +104,16 @@ CONSUMER_TEST_PLATFORM=linux/amd64 npm run test:consumer
 ```
 
 The smoke suite covers real HTTP -> relay -> consumer -> durable job, independent group-offset inspection, duplicate identities, quarantine, PostgreSQL outage, shutdown, and a host-killed SQL-before-offset checkpoint during rebalance. Test actors/producer fixtures run only in disposable containers and are not copied into application images. See [review 0017](../quality/reviews/0017-local-scheduling-consumer.md). This adds no executor, answer/result generation or replay.
+
+## Execution ownership development boundary
+
+The [ownership patch](../quality/reviews/0018-execution-ownership.md) prepares a PostgreSQL protocol for consumer-created jobs: claim with a 30-second lease, renew while current, reschedule classified transient failure with bounded jitter, and atomically fail/exhaust the job with one failure outbox record. No executor process polls jobs yet, and this patch does not generate or persist successful answers.
+
+Its integration tests use authenticated non-admin worker sessions. `npm run test:consumer` additionally invokes the ownership adapter through a trusted test operator on a real consumer-created job, then verifies the relay publishes the exact terminal event to `tickets.execution-failed.v1` without scheduling another job. That probe intentionally produces one failed execution; it is not an enabled executor service or a public fault-injection route. Terminal HTTP result/failure reads remain unimplemented and fail closed.
+
+```sh
+npm run test:database
+npm run test:consumer
+```
+
+The future executor loop must own the five-second heartbeat cadence, monotonic 60-second attempt deadline, cancellation and provider classification. SQL ownership is checked under locks with database time; an expired token cannot renew or finalize the current owner. Lease fencing does not prevent repeated external calls or their cost after a crash. A new result-persistence patch must use the same lock order and ownership checks atomically with its writes.

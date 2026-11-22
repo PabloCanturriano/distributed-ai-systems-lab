@@ -1,6 +1,6 @@
 # Native local scheduling consumer
 
-Status: prepared under owner-approved ADR-0007, pending exact-patch commit review. Base `5acb67d` and its preceding four commits were pushed to main with owner authorization. Proposed commit: `feat: consume Kafka events into durable scheduling jobs`.
+Status: exact implementation approved, committed as `df155ba` and pushed under owner-approved ADR-0007. Base `5acb67d` and its preceding four commits were pushed to main with owner authorization. Proposed commit: `feat: consume Kafka events into durable scheduling jobs`.
 
 ## Purpose and affected files
 

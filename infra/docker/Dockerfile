@@ -54,6 +54,9 @@ COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 CMD ["node", "apps/worker/dist/main.js"]
 
+FROM worker AS executor
+CMD ["node", "apps/worker/dist/executor-main.js"]
+
 FROM worker AS relay
 COPY --from=relay-dependencies /app/node_modules ./node_modules
 CMD ["node", "apps/worker/dist/relay-main.js"]

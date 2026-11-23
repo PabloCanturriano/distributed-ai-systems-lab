@@ -3,7 +3,30 @@ const {
   loadWorkerConfiguration,
   loadRelayConfiguration,
   loadConsumerConfiguration,
+  loadExecutorConfiguration,
 } = require('@lab/configuration');
+test('executor has only its independently validated local PostgreSQL endpoint', () => {
+  expect(loadExecutorConfiguration({})).toEqual({
+    mode: 'local',
+    postgres: { host: 'postgres', port: 5432 },
+  });
+  expect(
+    loadExecutorConfiguration({
+      EXECUTOR_PG_HOST: '127.0.0.1',
+      EXECUTOR_PG_PORT: '5433',
+    }).postgres,
+  ).toEqual({ host: '127.0.0.1', port: 5433 });
+});
+test.each([
+  { APP_MODE: 'hosted' },
+  { EXECUTOR_PG_PORT: '0' },
+  { EXECUTOR_PG_PORT: '65536' },
+  { EXECUTOR_PG_HOST: 'private-user@host' },
+])('executor rejects invalid settings without exposing them', (environment) => {
+  expect(() => loadExecutorConfiguration(environment)).toThrow(
+    /^Invalid executor configuration$/,
+  );
+});
 
 test('consumer uses its own validated local endpoints', () => {
   expect(loadConsumerConfiguration({})).toEqual({

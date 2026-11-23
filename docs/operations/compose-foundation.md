@@ -52,7 +52,7 @@ Missing or altered database password material, incompatible roles, failed migrat
 
 The mounted secrets must retain UID/GID 1000 ownership, mode 0700 directories, and mode 0600 regular files. The trusted secret initializer changes ownership only for brand-new empty root-owned volumes. Existing incompatible volumes fail. Administrative passwords remain accessible to the trusted Docker host and initialization jobs; these local secret volumes are not a production secret manager.
 
-Compose dependencies gate startup only. The API adapter separately provides tested readiness degradation/reconnection on PostgreSQL/Redis stop or pause, without restarting the API. Consumer/job recovery and automatic application restart policies remain future work; the optional relay retries publication as described below.
+Compose dependencies gate startup only. The API adapter separately provides tested readiness degradation/reconnection on PostgreSQL/Redis stop or pause, without restarting the API. The opt-in consumer/executor recovery evidence is described below; automatic application restart policies remain future work; the optional relay retries publication as described below.
 
 ## Verification
 
@@ -125,3 +125,20 @@ The [completion patch](../quality/reviews/0019-simulated-completions.md) prepare
 `npm run test:consumer` exercises both terminal reads for the three tenant roles and verifies another tenant receives 404. Its completion is invoked by a trusted test operator after real Kafka admission. No automatic executor service or model adapter is activated by this patch; submitting a normal ticket still queues work until a reviewed caller claims and finishes it. The future loop must provide heartbeat, attempt deadline and classified failure handling around the completion boundary.
 
 The API image requires the eighth migration for its joined read projection; Compose's existing migration/seed gates provide this ordering. Missing or inconsistent terminal storage produces a generic 503, not fabricated success. Results with outcome `answered`, nonempty citations/tools or real-provider labels remain unsupported until their separately implemented storage and validation exist.
+
+
+## Automatic simulated execution (prepared for review)
+
+The [automatic executor patch](../quality/reviews/0020-automatic-executor.md) supersedes the earlier slices' manual-completion boundary. Start the complete opt-in workflow with:
+
+```sh
+docker compose --profile messaging --profile execution up --build --detach --wait --wait-timeout 180
+```
+
+The `execution` profile adds a separate executor with two concurrent handlers, five-second lease renewal and a 60-second monotonic provider deadline. It polls PostgreSQL after consumer admission; it cannot schedule around Kafka. The executor depends on seeded PostgreSQL, not broker health, and can finish already admitted work while Kafka is offline. The `messaging` profile still selects relay and consumer. Without `execution`, the default worker remains idle and admitted work stays queued.
+
+Only the existing read-only worker credential volume is mounted. The non-root executor has a read-only root filesystem, no capabilities, no host ports or socket, and backend-network access. It uses the non-native worker image target with a separate entry point. Fixed status events exclude questions, answers, provider errors and credentials. Shutdown stops claims and aborts active work, leaving unfinished leases recoverable; a 12-second process deadline fits the 15-second Compose grace period.
+
+The current provider always returns a fixed simulated `insufficient_evidence` result with no citations or tools. It reads no question or corpus and calls no model. Provider cancellation is cooperative; SQL finalization has separate finite timeouts and can have an uncertain commit acknowledgement. The 60-second deadline does not promise a hard wall-clock SQL commit deadline.
+
+Run `npm run test:executor` for the isolated full journey, restart, post-admission Kafka outage, idempotency, tenant isolation, durable counts, mount/log and shutdown checks. Cleanup removes only that test project's resources. The advertised full-stack command passed from empty test volumes; it is not a throughput or release-readiness claim.

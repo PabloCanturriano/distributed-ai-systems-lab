@@ -917,3 +917,75 @@ test('a valid eight-KiB Unicode answer round-trips without truncation', async ()
   ).toBe(true);
   expect((await readTicket(claim.ticketId)).result.answer).toBe(answer);
 });
+test('the executor renews a real lease while provider work remains outside SQL and abandons on shutdown', async () => {
+  await admitted();
+  const { JobExecutor } = require('../../apps/worker/dist/job-executor.js');
+  const controller = new AbortController();
+  let claim, signal, started, lateResult;
+  const ready = new Promise((resolve) => {
+    started = resolve;
+  });
+  const task = new JobExecutor(ownership(), {
+    execute: (value, abort) => {
+      claim = value;
+      signal = abort;
+      started();
+      return new Promise((resolve) => {
+        lateResult = resolve;
+      });
+    },
+  }).runOnce(controller.signal);
+  try {
+    await ready;
+    const initial = (await state(claim.jobId)).lease_expires_at;
+    const until = performance.now() + 9000;
+    let renewed = false;
+    while (performance.now() < until) {
+      renewed = (await state(claim.jobId)).lease_expires_at > initial;
+      if (renewed) break;
+      await delay(50);
+    }
+    expect(renewed).toBe(true);
+    expect(
+      (
+        await admin.query(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name='execution-worker-test' AND state LIKE 'idle in transaction%'",
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  } finally {
+    controller.abort();
+    await task;
+  }
+  expect(signal.aborted).toBe(true);
+  expect((await state(claim.jobId)).status).toBe('running');
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.execution_results',
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  // Controlled expiry of the abandoned lease, then a fresh runtime invocation.
+  // The SQL time predicate is real; this avoids a 30-second test-only idle wait.
+  await expire(claim);
+  const {
+    SimulatedAbstentionProvider,
+  } = require('../../apps/worker/dist/simulated-provider.js');
+  expect(
+    await new JobExecutor(
+      ownership(),
+      new SimulatedAbstentionProvider(),
+    ).runOnce(new AbortController().signal),
+  ).toBe(true);
+  const completed = await readTicket(claim.ticketId);
+  expect(completed.status).toBe('completed');
+  expect(completed.result.execution.attemptCount).toBe(2);
+  lateResult({
+    ...abstention,
+    answer: 'An abandoned provider result must not overwrite the replacement.',
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(await readTicket(claim.ticketId)).toEqual(completed);
+}, 15000);

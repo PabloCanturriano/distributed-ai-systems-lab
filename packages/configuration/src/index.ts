@@ -123,3 +123,19 @@ export function loadConsumerConfiguration(environment: Environment) {
     },
   });
 }
+
+const executorEnvironment = workerEnvironment.extend({
+  EXECUTOR_PG_HOST: dependencyHost.default('postgres'),
+  EXECUTOR_PG_PORT: dependencyPort(5432),
+});
+export function loadExecutorConfiguration(environment: Environment) {
+  const result = executorEnvironment.safeParse(environment);
+  if (!result.success) throw new Error('Invalid executor configuration');
+  return Object.freeze({
+    mode: result.data.APP_MODE,
+    postgres: {
+      host: result.data.EXECUTOR_PG_HOST,
+      port: result.data.EXECUTOR_PG_PORT,
+    },
+  });
+}

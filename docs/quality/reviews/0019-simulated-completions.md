@@ -1,6 +1,6 @@
 # Fenced simulated completions and terminal ticket reads
 
-Status: prepared for exact-patch review under ADR-0001/0002/0003. Not committed or pushed. Base `3abe4ea` contains the explicitly approved ownership patch and is pushed. Proposed commit: `feat: persist fenced simulated results and terminal ticket reads`.
+Status: approved, committed and pushed as `354b29c` (`feat: persist fenced simulated results and terminal ticket reads`). Its [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45106618466). The evidence below records this slice at implementation time; [review 0020](0020-automatic-executor.md) adds automatic execution.
 
 ## Purpose and affected files
 

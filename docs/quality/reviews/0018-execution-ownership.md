@@ -1,6 +1,6 @@
 # Durable execution ownership and failure recovery
 
-Status: prepared for exact-patch review under the accepted ADR-0001 SQL execution architecture. Not committed or pushed. Base `df155ba` contains the approved native scheduling consumer and is pushed. Proposed commit: `feat: add leased execution ownership and failure recovery`.
+Status: exact patch explicitly approved, committed as `3abe4ea` and pushed under the accepted ADR-0001 SQL execution architecture. Base `df155ba` contains the approved native scheduling consumer and is pushed. Proposed commit: `feat: add leased execution ownership and failure recovery`.
 
 ## Purpose and affected files
 

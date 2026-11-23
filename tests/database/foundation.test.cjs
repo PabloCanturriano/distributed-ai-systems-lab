@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(7);
+  expect(applied).toBe(8);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -96,6 +96,7 @@ test('clean install applies the identity migration as the non-superuser owner', 
     'event_quarantine',
     'execution_attempts',
     'execution_jobs',
+    'execution_results',
     'idempotency_records',
     'outbox_events',
     'principals',
@@ -125,7 +126,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(7);
+  ).toBe(8);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -278,7 +279,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(7);
+    ).toBe(8);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -689,7 +690,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3, 4, 5, 6])(
+test.each([2, 3, 4, 5, 6, 7])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -727,6 +728,11 @@ test.each([2, 3, 4, 5, 6])(
           'database/migrations/1795219200000_scheduling-admission.cjs',
           join(directory, '1795219200000_scheduling-admission.cjs'),
         );
+      if (baselineCount >= 7)
+        await copyFile(
+          'database/migrations/1795305600000_execution-ownership.cjs',
+          join(directory, '1795305600000_execution-ownership.cjs'),
+        );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
       upgrade = new Client({
@@ -751,6 +757,7 @@ test.each([2, 3, 4, 5, 6])(
       await upgrade.query('SET ROLE lab_seed');
       await seedDemoIdentities(upgrade, join(directory, 'private-identities'));
       let pendingEvent, pendingJob;
+      let pendingAttempts = [];
       if (baselineCount >= 4) {
         await upgrade.query('RESET ROLE');
         const {
@@ -784,6 +791,15 @@ test.each([2, 3, 4, 5, 6])(
             key: Buffer.from(JSON.parse(pendingEvent.payload).ticketId),
             value: Buffer.from(pendingEvent.payload),
           });
+          if (baselineCount >= 7) {
+            const {
+              ExecutionOwnership,
+            } = require('../../apps/worker/dist/execution-ownership.js');
+            await new ExecutionOwnership(source).claim();
+            pendingAttempts = (
+              await upgrade.query('SELECT * FROM lab.execution_attempts')
+            ).rows;
+          }
           pendingJob = (await upgrade.query('SELECT * FROM lab.execution_jobs'))
             .rows[0];
         }
@@ -795,7 +811,7 @@ test.each([2, 3, 4, 5, 6])(
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(7 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(8 - baselineCount);
       if (pendingJob) {
         const job = (
           await upgrade.query('SELECT * FROM lab.execution_jobs WHERE id=$1', [
@@ -803,13 +819,18 @@ test.each([2, 3, 4, 5, 6])(
           ])
         ).rows[0];
         expect(job).toMatchObject(pendingJob);
-        expect(job.attempt_id).toBeNull();
-        expect(job.lease_expires_at).toBeNull();
+        expect(job.attempt_id).toBe(pendingJob.attempt_id ?? null);
+        expect(job.lease_expires_at).toEqual(
+          pendingJob.lease_expires_at ?? null,
+        );
         expect(job.failure_code).toBeNull();
+        expect(
+          (await upgrade.query('SELECT * FROM lab.execution_attempts')).rows,
+        ).toEqual(pendingAttempts);
         expect(
           (
             await upgrade.query(
-              'SELECT count(*)::int AS n FROM lab.execution_attempts',
+              'SELECT count(*)::int AS n FROM lab.execution_results',
             )
           ).rows[0].n,
         ).toBe(0);

@@ -71,7 +71,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
+    'TRUNCATE lab.execution_results,lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
   );
 });
 afterAll(async () => {
@@ -127,6 +127,18 @@ function ownership(source = workerPool) {
   } = require('../../apps/worker/dist/execution-ownership.js');
   return new ExecutionOwnership(source);
 }
+const abstention = {
+  outcome: 'insufficient_evidence',
+  answer: 'No indexed evidence is available in this simulated scenario.',
+};
+function readTicket(ticketId) {
+  const { TicketReads } = require('../../apps/api/dist/ticket-read.js');
+  return new TicketReads(apiPool).get({
+    tenantId: tenant,
+    principalId: principal,
+    ticketId,
+  });
+}
 test('an admitted job is claimed with a durable attempt and processing lifecycle in one transaction', async () => {
   const job = await admitted();
   const claim = await ownership().claim();
@@ -156,6 +168,36 @@ test('an admitted job is claimed with a durable attempt and processing lifecycle
       )
     ).rows,
   ).toEqual([{ id: claim.attemptId, status: 'running', attempt_number: 1 }]);
+});
+test('a live owner persists a bounded simulated abstention and completes its attempt atomically', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, {
+      outcome: 'insufficient_evidence',
+      answer: 'No indexed evidence is available in this simulated scenario.',
+    }),
+  ).toBe(true);
+  expect((await state(claim.jobId)).status).toBe('completed');
+  expect(
+    (await migrator.query('SELECT status FROM lab.execution_attempts')).rows,
+  ).toEqual([{ status: 'succeeded' }]);
+  expect(
+    (await migrator.query('SELECT status FROM lab.ticket_executions')).rows,
+  ).toEqual([{ status: 'completed' }]);
+  expect(
+    (
+      await migrator.query(
+        'SELECT outcome,provider_mode,attempt_count FROM lab.execution_results',
+      )
+    ).rows,
+  ).toEqual([
+    {
+      outcome: 'insufficient_evidence',
+      provider_mode: 'simulated',
+      attempt_count: 1,
+    },
+  ]);
 });
 
 async function expire(claim) {
@@ -270,7 +312,7 @@ test('expired attempts are retained and a recovered owner receives a different t
     attempt_count: 2,
   });
 });
-test.each(['renew', 'retry', 'fail'])(
+test.each(['renew', 'retry', 'fail', 'complete'])(
   'ownership for %s is evaluated after the row lock even when the row is unchanged through expiry',
   async (operation) => {
     await admitted();
@@ -283,7 +325,10 @@ test.each(['renew', 'retry', 'fail'])(
     await migrator.query('SELECT id FROM lab.tickets WHERE id=$1 FOR UPDATE', [
       claim.ticketId,
     ]);
-    const pending = ownership()[operation](claim.jobId, claim.attemptId);
+    const pending =
+      operation === 'complete'
+        ? ownership().complete(claim.jobId, claim.attemptId, abstention)
+        : ownership()[operation](claim.jobId, claim.attemptId);
     const settled = Promise.allSettled([pending]);
     try {
       const deadline = performance.now() + 1500;
@@ -412,6 +457,14 @@ test.each(['crash', 'retry'])(
     expect(
       (await failures()).map((row) => JSON.parse(row.payload).data),
     ).toEqual([{ failureCode: 'ATTEMPTS_EXHAUSTED', attemptCount: 3 }]);
+    expect(await readTicket(claim.ticketId)).toMatchObject({
+      status: 'failed',
+      result: null,
+      failure: {
+        code: 'ATTEMPTS_EXHAUSTED',
+        message: 'Execution attempts exhausted.',
+      },
+    });
   },
 );
 test('failure-notification write failure rolls back the attempt, job and execution changes', async () => {
@@ -579,6 +632,9 @@ test('generation changes fence an old live owner and unscheduled new executions 
   }
   for (const op of ['renew', 'retry', 'fail'])
     expect(await ownership()[op](claim.jobId, claim.attemptId)).toBe(false);
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, abstention),
+  ).toBe(false);
   expect(await ownership().claim()).toBeNull();
   expect(await failures()).toHaveLength(0);
 });
@@ -636,4 +692,228 @@ test('terminal notification uniqueness forbids a second logical failure identity
     ),
   ).rejects.toMatchObject({ code: '23505' });
   expect(await failures()).toHaveLength(1);
+});
+test('terminal reads expose simulated result data but no ownership or credential metadata', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, abstention),
+  ).toBe(true);
+  const result = await readTicket(claim.ticketId);
+  expect(result).toMatchObject({
+    ticketId: claim.ticketId,
+    generation: 1,
+    status: 'completed',
+    failure: null,
+    result: {
+      ...abstention,
+      citations: [],
+      execution: { providerMode: 'simulated', attemptCount: 1, toolCalls: [] },
+    },
+  });
+  expect(Object.keys(result).sort()).toEqual(
+    [
+      'ticketId',
+      'generation',
+      'status',
+      'createdAt',
+      'updatedAt',
+      'result',
+      'failure',
+    ].sort(),
+  );
+  expect(JSON.stringify(result)).not.toContain(claim.attemptId);
+  expect(JSON.stringify(result)).not.toContain(claim.jobId);
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, {
+      ...abstention,
+      answer: 'Replacement must not overwrite.',
+    }),
+  ).toBe(false);
+  expect((await readTicket(claim.ticketId)).result.answer).toBe(
+    abstention.answer,
+  );
+});
+test('failed reads return only allowlisted failure codes and fixed messages', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  await ownership().fail(claim.jobId, claim.attemptId);
+  expect(await readTicket(claim.ticketId)).toMatchObject({
+    status: 'failed',
+    result: null,
+    failure: { code: 'EXECUTION_FAILED', message: 'Execution failed.' },
+  });
+});
+test('an expired old owner cannot persist a result or overwrite the replacement owner', async () => {
+  await admitted();
+  const old = await ownership().claim();
+  await expire(old);
+  const current = await ownership().claim();
+  expect(await ownership().complete(old.jobId, old.attemptId, abstention)).toBe(
+    false,
+  );
+  expect(
+    await ownership().complete(current.jobId, current.attemptId, abstention),
+  ).toBe(true);
+  expect(
+    (
+      await migrator.query(
+        'SELECT attempt_id,attempt_count FROM lab.execution_results',
+      )
+    ).rows,
+  ).toEqual([{ attempt_id: current.attemptId, attempt_count: 2 }]);
+});
+test('a later completion write failure rolls back the result and every lifecycle change', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  await migrator.query(
+    "CREATE FUNCTION lab.reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='completed' THEN RAISE EXCEPTION 'fixture-private-completion'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_completion BEFORE UPDATE ON lab.ticket_executions FOR EACH ROW EXECUTE FUNCTION lab.reject_completion()",
+  );
+  try {
+    await expect(
+      ownership().complete(claim.jobId, claim.attemptId, abstention),
+    ).rejects.toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+    expect(
+      (
+        await migrator.query(
+          'SELECT count(*)::int AS n FROM lab.execution_results',
+        )
+      ).rows[0].n,
+    ).toBe(0);
+    expect(await state(claim.jobId)).toMatchObject({
+      status: 'running',
+      attempt_id: claim.attemptId,
+    });
+    expect(
+      (await migrator.query('SELECT status FROM lab.execution_attempts')).rows,
+    ).toEqual([{ status: 'running' }]);
+  } finally {
+    await migrator.query(
+      'DROP TRIGGER reject_completion ON lab.ticket_executions; DROP FUNCTION lab.reject_completion()',
+    );
+  }
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, abstention),
+  ).toBe(true);
+});
+test('lost completion acknowledgement retains exactly one immutable result', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  let lose = true;
+  const proxy = {
+    async connect() {
+      const c = await workerPool.connect();
+      return {
+        async query(text, values) {
+          const result = await c.query(text, values);
+          if (text === 'COMMIT' && lose) {
+            lose = false;
+            throw new Error('fixture-private-result-ack');
+          }
+          return result;
+        },
+        release(discard) {
+          c.release(discard);
+        },
+      };
+    },
+  };
+  await expect(
+    ownership(proxy).complete(claim.jobId, claim.attemptId, abstention),
+  ).rejects.toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, abstention),
+  ).toBe(false);
+  expect(
+    (await migrator.query('SELECT answer FROM lab.execution_results')).rows,
+  ).toEqual([{ answer: abstention.answer }]);
+  expect((await readTicket(claim.ticketId)).status).toBe('completed');
+});
+test('concurrent completion and failure commit one coherent terminal outcome', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  const outcomes = await Promise.all([
+    ownership().complete(claim.jobId, claim.attemptId, abstention),
+    ownership().fail(claim.jobId, claim.attemptId),
+  ]);
+  expect(outcomes.filter(Boolean)).toHaveLength(1);
+  const result = await readTicket(claim.ticketId);
+  const results = (
+    await migrator.query('SELECT count(*)::int AS n FROM lab.execution_results')
+  ).rows[0].n;
+  expect(results + (await failures()).length).toBe(1);
+  expect(result.status).toBe(results ? 'completed' : 'failed');
+});
+test('result constraints bind job, attempt and execution and keep result content immutable', async () => {
+  await admitted();
+  await admitted();
+  const first = await ownership().claim(),
+    second = await ownership().claim();
+  const client = await workerPool.connect();
+  try {
+    await client.query('SET ROLE lab_worker');
+    await expect(
+      client.query(
+        "INSERT INTO lab.execution_results(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_count,outcome,answer,provider_mode) VALUES($1,$2,1,$3,$4,1,'insufficient_evidence','Simulated abstention','simulated')",
+        [tenant, first.ticketId, second.jobId, second.attemptId],
+      ),
+    ).rejects.toMatchObject({ code: '23503' });
+    for (const sql of [
+      "UPDATE lab.execution_results SET answer='Replacement'",
+      'DELETE FROM lab.execution_results',
+    ])
+      await expect(client.query(sql)).rejects.toMatchObject({ code: '42501' });
+  } finally {
+    await client.query('RESET ROLE');
+    client.release();
+  }
+  const api = await apiPool.connect();
+  try {
+    await api.query('SET ROLE lab_api');
+    for (const sql of [
+      'SELECT attempt_id FROM lab.execution_results',
+      'SELECT attempt_id FROM lab.execution_jobs',
+      "UPDATE lab.execution_results SET answer='Replacement'",
+    ])
+      await expect(api.query(sql)).rejects.toMatchObject({ code: '42501' });
+  } finally {
+    await api.query('RESET ROLE');
+    api.release();
+  }
+});
+test('terminal result lookup remains tenant scoped', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  await ownership().complete(claim.jobId, claim.attemptId, abstention);
+  const foreignTenant = randomUUID(),
+    foreignPrincipal = randomUUID();
+  await migrator.query('INSERT INTO lab.tenants(id,name) VALUES($1,$2)', [
+    foreignTenant,
+    'Fictional result isolation tenant',
+  ]);
+  await migrator.query(
+    "INSERT INTO lab.principals(id,tenant_id,role) VALUES($1,$2,'reader')",
+    [foreignPrincipal, foreignTenant],
+  );
+  const { TicketReads } = require('../../apps/api/dist/ticket-read.js');
+  await expect(
+    new TicketReads(apiPool).get({
+      tenantId: foreignTenant,
+      principalId: foreignPrincipal,
+      ticketId: claim.ticketId,
+    }),
+  ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+});
+test('a valid eight-KiB Unicode answer round-trips without truncation', async () => {
+  await admitted();
+  const claim = await ownership().claim();
+  const answer = '🙂'.repeat(2048);
+  expect(Buffer.byteLength(answer)).toBe(8192);
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, {
+      outcome: 'insufficient_evidence',
+      answer,
+    }),
+  ).toBe(true);
+  expect((await readTicket(claim.ticketId)).result.answer).toBe(answer);
 });

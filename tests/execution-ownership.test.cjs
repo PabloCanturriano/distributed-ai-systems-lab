@@ -34,3 +34,28 @@ test('ownership connection errors remain generic', async () => {
     message: 'DEPENDENCY_UNAVAILABLE',
   });
 });
+test.each([
+  { outcome: 'answered', answer: 'Unsupported answer' },
+  { outcome: 'insufficient_evidence', answer: '' },
+  { outcome: 'insufficient_evidence', answer: ' \n\t ' },
+  { outcome: 'insufficient_evidence', answer: 'x'.repeat(8193) },
+  { outcome: 'insufficient_evidence', answer: '🙂'.repeat(2049) },
+  { outcome: 'insufficient_evidence', answer: 'bad\0value' },
+  { outcome: 'insufficient_evidence', answer: 'bad\ud800value' },
+  {
+    outcome: 'insufficient_evidence',
+    answer: 'A simulation',
+    providerMode: 'real',
+  },
+  {
+    outcome: 'insufficient_evidence',
+    answer: 'A simulation',
+    citations: [{ documentId: randomUUID() }],
+  },
+])('unsupported or unsafe result content never reaches SQL', (input) => {
+  const pool = { connect: jest.fn() };
+  expect(() =>
+    new ExecutionOwnership(pool).complete(randomUUID(), randomUUID(), input),
+  ).toThrow('INVALID_REQUEST');
+  expect(pool.connect).not.toHaveBeenCalled();
+});

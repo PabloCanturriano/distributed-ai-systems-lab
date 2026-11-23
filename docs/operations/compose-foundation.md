@@ -109,7 +109,7 @@ The smoke suite covers real HTTP -> relay -> consumer -> durable job, independen
 
 The [ownership patch](../quality/reviews/0018-execution-ownership.md) prepares a PostgreSQL protocol for consumer-created jobs: claim with a 30-second lease, renew while current, reschedule classified transient failure with bounded jitter, and atomically fail/exhaust the job with one failure outbox record. No executor process polls jobs yet, and this patch does not generate or persist successful answers.
 
-Its integration tests use authenticated non-admin worker sessions. `npm run test:consumer` additionally invokes the ownership adapter through a trusted test operator on a real consumer-created job, then verifies the relay publishes the exact terminal event to `tickets.execution-failed.v1` without scheduling another job. That probe intentionally produces one failed execution; it is not an enabled executor service or a public fault-injection route. Terminal HTTP result/failure reads remain unimplemented and fail closed.
+Its integration tests use authenticated non-admin worker sessions. `npm run test:consumer` additionally invokes the ownership adapter through a trusted test operator on a real consumer-created job, then verifies the relay publishes the exact terminal event to `tickets.execution-failed.v1` without scheduling another job. That probe intentionally produces one failed execution; it is not an enabled executor service or a public fault-injection route. The reviewed completion patch below adds terminal HTTP reads for supported stored results/failures; inconsistent terminal rows still fail closed.
 
 ```sh
 npm run test:database
@@ -117,3 +117,11 @@ npm run test:consumer
 ```
 
 The future executor loop must own the five-second heartbeat cadence, monotonic 60-second attempt deadline, cancellation and provider classification. SQL ownership is checked under locks with database time; an expired token cannot renew or finalize the current owner. Lease fencing does not prevent repeated external calls or their cost after a crash. A new result-persistence patch must use the same lock order and ownership checks atomically with its writes.
+
+## Fenced simulated completion and terminal HTTP reads
+
+The [completion patch](../quality/reviews/0019-simulated-completions.md) prepares `ExecutionOwnership.complete` and terminal `GET /v1/tickets/{id}` reads. A current attempt can atomically store a bounded simulated `insufficient_evidence` answer, finish its attempt/job and mark the execution completed. Results are immutable and scoped to the exact execution/job/attempt. The API returns `providerMode: simulated`, the server-owned attempt count, and empty citation/tool-call arrays. It does not claim model inference or supported citations. Allowlisted stored failures also become readable through the authenticated GET route.
+
+`npm run test:consumer` exercises both terminal reads for the three tenant roles and verifies another tenant receives 404. Its completion is invoked by a trusted test operator after real Kafka admission. No automatic executor service or model adapter is activated by this patch; submitting a normal ticket still queues work until a reviewed caller claims and finishes it. The future loop must provide heartbeat, attempt deadline and classified failure handling around the completion boundary.
+
+The API image requires the eighth migration for its joined read projection; Compose's existing migration/seed gates provide this ordering. Missing or inconsistent terminal storage produces a generic 503, not fabricated success. Results with outcome `answered`, nonempty citations/tools or real-provider labels remain unsupported until their separately implemented storage and validation exist.

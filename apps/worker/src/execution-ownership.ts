@@ -32,6 +32,18 @@ interface LockedJob {
   correlation_id: string;
 }
 const identity = z.tuple([z.uuid(), z.uuid()]);
+const resultSchema = z.strictObject({
+  outcome: z.literal('insufficient_evidence'),
+  answer: z
+    .string()
+    .refine(
+      (value) =>
+        value.trim().length > 0 &&
+        Buffer.byteLength(value, 'utf8') <= 8192 &&
+        !value.includes('\0') &&
+        !/[\uD800-\uDFFF]/u.test(value),
+    ),
+});
 export class ExecutionOwnership {
   constructor(private readonly pool: Pick<Pool, 'connect'>) {}
   private async transaction<T>(
@@ -125,8 +137,8 @@ export class ExecutionOwnership {
   private async endAttempt(
     client: PoolClient,
     job: LockedJob,
-    status: 'expired' | 'retryable' | 'failed',
-    code: string,
+    status: 'expired' | 'retryable' | 'failed' | 'succeeded',
+    code: string | null,
   ): Promise<void> {
     const result = await client.query(
       "UPDATE lab.execution_attempts SET status=$3,finished_at=clock_timestamp(),failure_code=$4 WHERE id=$1 AND job_id=$2 AND status='running'",
@@ -257,6 +269,38 @@ export class ExecutionOwnership {
   }
   retry(jobId: string, attemptId: string): Promise<boolean> {
     return this.finish(jobId, attemptId, true);
+  }
+  complete(jobId: string, attemptId: string, input: unknown): Promise<boolean> {
+    this.validate(jobId, attemptId);
+    const result = resultSchema.safeParse(input);
+    if (!result.success) throw new ExecutionOwnershipError('INVALID_REQUEST');
+    return this.transaction(async (client) => {
+      const job = await this.lock(client, jobId);
+      if (!job || !(await this.owned(client, job, attemptId))) return false;
+      await client.query(
+        "INSERT INTO lab.execution_results(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_count,outcome,answer,provider_mode) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'simulated')",
+        [
+          job.tenant_id,
+          job.ticket_id,
+          job.generation,
+          job.id,
+          job.attempt_id,
+          job.attempt_count,
+          result.data.outcome,
+          result.data.answer,
+        ],
+      );
+      await this.endAttempt(client, job, 'succeeded', null);
+      await client.query(
+        "UPDATE lab.execution_jobs SET status='completed',attempt_id=NULL,lease_expires_at=NULL WHERE id=$1",
+        [job.id],
+      );
+      await client.query(
+        "UPDATE lab.ticket_executions SET status='completed',updated_at=clock_timestamp() WHERE tenant_id=$1 AND ticket_id=$2 AND generation=$3",
+        [job.tenant_id, job.ticket_id, job.generation],
+      );
+      return true;
+    });
   }
   fail(jobId: string, attemptId: string): Promise<boolean> {
     return this.finish(jobId, attemptId, false);

@@ -73,6 +73,17 @@ async function submit() {
   const code = `import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {randomUUID} from 'node:crypto';const manifest=JSON.parse(readFileSync('/run/lab/demo/identities/identities-v1.json','utf8'));const c=manifest.credentials.find(x=>x.alias==='harbor.requester');const r=await fetch('http://api:3000/v1/tickets',{method:'POST',headers:{authorization:'Bearer '+c.lookupId+'.'+c.secret,'content-type':'application/json','idempotency-key':randomUUID()},body:JSON.stringify({message:'consumer-private-question-fixture'}),signal:AbortSignal.timeout(5000)});assert.equal(r.status,202);console.log(JSON.stringify({ticketId:(await r.json()).ticketId}));`;
   return JSON.parse((await oneShot('seed', code)).stdout).ticketId;
 }
+const simulatedAnswer =
+  'This simulated scenario has no indexed evidence for a supported answer.';
+async function terminalRead(ticketId, status) {
+  const code = `import assert from 'node:assert/strict';import{readFileSync}from'node:fs';import{randomUUID}from'node:crypto';const manifest=JSON.parse(readFileSync('/run/lab/demo/identities/identities-v1.json','utf8'));const ticket=process.argv[1],status=process.argv[2];async function read(alias,id){const c=manifest.credentials.find(x=>x.alias===alias);const response=await fetch('http://api:3000/v1/tickets/'+id,{headers:{authorization:'Bearer '+c.lookupId+'.'+c.secret},signal:AbortSignal.timeout(5000)});assert.equal(response.headers.get('cache-control'),'no-store');const raw=await response.text();for(const c of manifest.credentials)assert.equal(raw.includes(c.secret),false);return {status:response.status,body:JSON.parse(raw)};}for(const alias of ['harbor.reader','harbor.requester','harbor.operator']){const r=await read(alias,ticket);assert.equal(r.status,200);assert.equal(r.body.status,status);assert.deepEqual(Object.keys(r.body).sort(),['ticketId','generation','status','createdAt','updatedAt','result','failure'].sort());if(status==='completed'){assert.deepEqual(r.body.result,{outcome:'insufficient_evidence',answer:process.argv[3],citations:[],execution:{providerMode:'simulated',attemptCount:1,toolCalls:[]}});assert.equal(r.body.failure,null);}else{assert.equal(r.body.result,null);assert.deepEqual(r.body.failure,{code:'EXECUTION_FAILED',message:'Execution failed.'});}}for(const id of [ticket,randomUUID()]){const denied=await read('summit.reader',id);assert.equal(denied.status,404);assert.equal(denied.body.error.code,'NOT_FOUND');}console.log(JSON.stringify({event:'terminal_http_read_passed',status}));`;
+  assert.deepEqual(
+    JSON.parse(
+      (await oneShot('seed', code, [ticketId, status, simulatedAnswer])).stdout,
+    ),
+    { event: 'terminal_http_read_passed', status },
+  );
+}
 async function event(ticketId) {
   const [row] = await query(
     'SELECT payload FROM lab.outbox_events WHERE ticket_id=$1',
@@ -294,6 +305,7 @@ try {
   console.log(
     'Consumer-created job ownership and atomic failure reached the real failure topic without rescheduling',
   );
+  await terminalRead(firstId, 'failed');
 
   await stopConsumer();
   await compose(['stop', 'relay']);
@@ -337,6 +349,18 @@ try {
   await committed(later);
   console.log(
     'PostgreSQL outage blocked later same-partition commits; bounded shutdown and redelivery recovered both jobs',
+  );
+  const completeJob = `import assert from 'node:assert/strict';import{createRequire}from'node:module';import{readFileSync}from'node:fs';const require=createRequire('/app/apps/worker/package.json');const{Pool}=require('pg');const{ExecutionOwnership}=require('./dist/execution-ownership.js');const pool=new Pool({host:'postgres',database:'lab',user:'lab_worker_login',password:readFileSync('/run/lab/worker/password','utf8'),max:1,connectionTimeoutMillis:1000,query_timeout:6000});pool.on('error',()=>{});try{const owner=new ExecutionOwnership(pool);const claim=await owner.claim();assert.equal(claim.ticketId,process.argv[1]);const result={outcome:'insufficient_evidence',answer:process.argv[2]};assert.equal(await owner.complete(claim.jobId,claim.attemptId,result),true);assert.equal(await owner.complete(claim.jobId,claim.attemptId,result),false);console.log(JSON.stringify({event:'simulated_completion_committed'}));}finally{await pool.end();}`;
+  assert.deepEqual(
+    JSON.parse(
+      (await oneShot('consumer', completeJob, [secondId, simulatedAnswer]))
+        .stdout,
+    ),
+    { event: 'simulated_completion_committed' },
+  );
+  await terminalRead(secondId, 'completed');
+  console.log(
+    'Real Kafka-admitted job completed with a simulated abstention and authenticated tenant-scoped HTTP result',
   );
 
   await stopConsumer();
@@ -500,7 +524,13 @@ try {
   }
   assert.ok(
     (await query('SELECT ticket_id,status FROM lab.ticket_executions')).every(
-      (row) => row.status === (row.ticket_id === firstId ? 'failed' : 'queued'),
+      (row) =>
+        row.status ===
+        (row.ticket_id === firstId
+          ? 'failed'
+          : row.ticket_id === secondId
+            ? 'completed'
+            : 'queued'),
     ),
   );
   const captured = await compose(['logs', '--no-color']);
@@ -511,6 +541,7 @@ try {
     firstEvent.value,
     fourthEvent.value,
     failure.payload,
+    simulatedAnswer,
   ])
     assert.equal(logs.includes(value), false);
   const check = `import assert from 'node:assert/strict';import{readFileSync,existsSync}from'node:fs';const logs=readFileSync(0,'utf8');for(const role of ['admin','migrator','seed','api','worker','relay']){const p='/run/lab/'+role+'/password';if(existsSync(p))assert.equal(logs.includes(readFileSync(p,'utf8')),false);}const p='/run/lab/demo/identities/identities-v1.json';if(existsSync(p))for(const c of JSON.parse(readFileSync(p,'utf8')).credentials)assert.equal(logs.includes(c.secret),false);`;

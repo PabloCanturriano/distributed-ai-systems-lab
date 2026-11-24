@@ -11,3 +11,6 @@ coverage/
 # Raw local identity files and incomplete private writes must never be committed.
 identities-v1.json
 .identity-*.tmp
+
+# Generated verification evidence is local and contains no raw application logs.
+/artifacts/

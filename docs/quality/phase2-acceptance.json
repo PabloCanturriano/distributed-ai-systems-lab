@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "phase": 2,
+  "criteria": [
+    {
+      "id": "HTTP-01",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "submission commits one ticket, execution, receipt and pending event together"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "assert.deepEqual(counts"
+        }
+      ],
+      "scope": "Authenticated acceptance and atomic durable scheduling intent."
+    },
+    {
+      "id": "HTTP-02",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent equal submissions wait on database uniqueness and share one receipt"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "const replies=await Promise.all"
+        }
+      ],
+      "scope": "Concurrent same-key/input HTTP and SQL reservations return one receipt."
+    },
+    {
+      "id": "HTTP-03",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent changed input yields one winner and one conflict"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": ".status,409"
+        }
+      ],
+      "scope": "Changed validated input conflicts without another ticket/event."
+    },
+    {
+      "id": "HTTP-04",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "a lost commit acknowledgement returns a safe error and retry observes committed receipt"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "Accepted response body deliberately discarded"
+        }
+      ],
+      "scope": "Lost real response body after 202, later completion, same-key original receipt."
+    },
+    {
+      "id": "HTTP-05",
+      "gates": ["test:database", "test:cli", "test:replay", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "foreign and missing ticket IDs have the same non-disclosing result"
+        },
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "NOT_FOUND"
+        }
+      ],
+      "scope": "Read/replay tenant isolation and no mutation."
+    },
+    {
+      "id": "EVENT-01",
+      "gates": ["test:database", "test:consumer"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent redelivery of one event commits one inbox identity and one job"
+        }
+      ],
+      "scope": "Durable duplicate transport admission through SQL and real Kafka."
+    },
+    {
+      "id": "EVENT-02",
+      "gates": ["test:database", "test:consumer"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "different concurrent event identities for one generation retain every inbox identity but one job"
+        }
+      ],
+      "scope": "Different event identities cannot create replacement work."
+    },
+    {
+      "id": "EVENT-03",
+      "gates": ["test:consumer"],
+      "evidence": [
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "consumer_sql_checkpoint"
+        },
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "Crash after SQL commit during rebalance redelivered"
+        }
+      ],
+      "scope": "Host-killed SQL-before-offset checkpoint with broker offset/rebalance observations."
+    },
+    {
+      "id": "DATA-01",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "a failure after inserting %s rolls back every submission row"
+        }
+      ],
+      "scope": "Real PostgreSQL trigger failure after each submission write."
+    },
+    {
+      "id": "DATA-02",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "composite creator references reject cross-tenant rows independently of application checks"
+        },
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "job references cannot combine one admitted event with a different tenant execution"
+        }
+      ],
+      "scope": "Tenant-consistent relational references for implemented ticket workflow."
+    },
+    {
+      "id": "DATA-03",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "concurrent claimers assign one token and consume one attempt for a job"
+        }
+      ],
+      "scope": "Real concurrent claims retain one active owner."
+    },
+    {
+      "id": "DATA-04",
+      "gates": ["test:database", "test:executor"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "an expired old owner cannot persist a result or overwrite the replacement owner"
+        },
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "the executor renews a real lease while provider work remains outside SQL and abandons on shutdown"
+        }
+      ],
+      "scope": "Database-time expiry/fencing and replacement completion; controlled expiry is labeled."
+    },
+    {
+      "id": "CLI-01",
+      "gates": ["test:cli", "test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/cli-smoke.mjs",
+          "contains": "Building CLI and starting the complete local workflow from empty volumes"
+        }
+      ],
+      "scope": "Containerized offline journey from empty volumes without a model key."
+    },
+    {
+      "id": "CLI-02",
+      "gates": ["check"],
+      "evidence": [
+        {
+          "path": "tests/cli.test.cjs",
+          "contains": "create retains one generated idempotency key after a lost acknowledgement"
+        },
+        {
+          "path": "tests/cli-transport.test.cjs",
+          "contains": "partial response loss retries a real POST with the original payload and key"
+        }
+      ],
+      "scope": "Generated stable retry key; actual HTTP partial-response loss."
+    },
+    {
+      "id": "CLI-03",
+      "gates": ["test:cli", "test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/cli-smoke.mjs",
+          "contains": "JSON.parse(value.stdout)"
+        }
+      ],
+      "scope": "Exactly one parseable final object; progress remains on stderr."
+    },
+    {
+      "id": "CLI-04",
+      "gates": ["check", "test:cli", "test:replay"],
+      "evidence": [
+        {
+          "path": "tests/cli.test.cjs",
+          "contains": "failed execution is observable through get but fails wait with exit 1"
+        },
+        {
+          "path": "tests/cli-transport.test.cjs",
+          "contains": "a real stalled body is cancelled by the overall deadline"
+        }
+      ],
+      "scope": "Distinct assertion/failure, transport and deadline exits, with real CLI checks."
+    },
+    {
+      "id": "SEC-01",
+      "gates": ["check", "test:database", "test:compose"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "credential/principal changes invalidate later authentication without a cache: %s"
+        },
+        {
+          "path": "tests/ticket-http.test.cjs",
+          "contains": "UNAUTHENTICATED"
+        }
+      ],
+      "scope": "Initial local HTTP/bearer authentication; no production identity-store claim."
+    },
+    {
+      "id": "SEC-02",
+      "gates": ["test:cli", "test:replay"],
+      "evidence": [
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "FORBIDDEN"
+        }
+      ],
+      "scope": "Readers/requesters cannot replay; readers cannot create; operators remain tenant-scoped."
+    },
+    {
+      "id": "SEC-03",
+      "gates": ["test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "harbor.operator"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "harbor.requester"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "summit.reader"
+        }
+      ],
+      "scope": "Requester reads another same-tenant member ticket; foreign/missing reads match."
+    }
+  ],
+  "traceCorrelation": {
+    "gates": ["check", "test:database", "test:tracing"],
+    "evidence": [
+      {
+        "path": "scripts/tracing-smoke.mjs",
+        "contains": "publication.parentSpanId, root.spanId"
+      },
+      {
+        "path": "tests/telemetry.test.cjs",
+        "contains": "stdout backpressure drops telemetry"
+      }
+    ],
+    "scope": "Manual OpenTelemetry spans, validated Kafka headers and durable origins, inspected in safe local logs. Collector, Jaeger, metrics and full phase-3 OBS acceptance are not claimed."
+  }
+}

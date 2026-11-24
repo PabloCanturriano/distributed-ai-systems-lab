@@ -1,7 +1,9 @@
+import { validTraceParent } from '@lab/telemetry';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 
 export interface OutboxClaim {
+  traceParent?: string;
   eventId: string;
   ticketId: string;
   type: string;
@@ -61,6 +63,7 @@ export class OutboxPublications {
         payload: string;
         payload_digest: Buffer;
         claim_token: string;
+        trace_parent: string | null;
       }>(
         `WITH candidates AS (
           SELECT event_id FROM lab.outbox_events WHERE published_at IS NULL AND available_at<=clock_timestamp()
@@ -69,10 +72,13 @@ export class OutboxPublications {
         ) UPDATE lab.outbox_events o SET claim_token=$2,claim_expires_at=clock_timestamp()+interval '30 seconds',
           publication_attempts=publication_attempts+1,last_error_code=NULL
           FROM candidates c WHERE o.event_id=c.event_id
-          RETURNING o.event_id,o.ticket_id,o.type,o.version,o.payload,o.payload_digest,o.claim_token`,
+          RETURNING o.event_id,o.ticket_id,o.type,o.version,o.payload,o.payload_digest,o.claim_token,o.trace_parent`,
         [limit, token],
       );
       return result.rows.map((row) => ({
+        ...(validTraceParent(row.trace_parent)
+          ? { traceParent: row.trace_parent! }
+          : {}),
         eventId: row.event_id,
         ticketId: row.ticket_id,
         type: row.type,

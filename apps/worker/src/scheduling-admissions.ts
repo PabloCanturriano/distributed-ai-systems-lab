@@ -1,3 +1,4 @@
+import { validTraceParent } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import {
@@ -26,6 +27,7 @@ export class SchedulingAdmissions {
   async admit(record: SchedulingRecord): Promise<AdmissionResult> {
     if (!record || !validSource(record))
       throw new SchedulingAdmissionError('INVALID_RECORD');
+    const traceParent = validTraceParent(record.traceParent);
     const digest = createHash('sha256')
       .update(record.value ?? Buffer.alloc(0))
       .digest();
@@ -145,7 +147,7 @@ export class SchedulingAdmissions {
         }
         if (disposition === 'scheduled')
           await client.query(
-            'INSERT INTO lab.execution_jobs(id,tenant_id,ticket_id,generation,consumer_name,source_event_id) VALUES($1,$2,$3,$4,$5,$6)',
+            `INSERT INTO lab.execution_jobs(id,tenant_id,ticket_id,generation,consumer_name,source_event_id${traceParent ? ',trace_parent' : ''}) VALUES($1,$2,$3,$4,$5,$6${traceParent ? ',$7' : ''})`,
             [
               randomUUID(),
               event.tenantId,
@@ -153,6 +155,7 @@ export class SchedulingAdmissions {
               event.generation,
               consumer,
               event.eventId,
+              ...(traceParent ? [traceParent] : []),
             ],
           );
         return { disposition };

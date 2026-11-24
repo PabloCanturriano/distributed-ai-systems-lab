@@ -1,3 +1,4 @@
+import { validTraceParent } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ const schema = z.strictObject({
   principalId: identifier,
   ticketId: identifier,
   requestId: identifier,
+  traceParent: z.unknown().optional().transform(validTraceParent),
   key: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
   body: z.strictObject({
     expectedGeneration: z.number().int().min(1).max(2147483646),
@@ -118,7 +120,7 @@ export class TicketReplays {
         data: { reason: 'replayed' },
       });
       await client.query(
-        'INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,$4,$5,1,$6,$7)',
+        `INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest${parsed.data.traceParent ? ',trace_parent' : ''}) VALUES($1,$2,$3,$4,$5,1,$6,$7${parsed.data.traceParent ? ',$8' : ''})`,
         [
           eventId,
           tenantId,
@@ -127,6 +129,7 @@ export class TicketReplays {
           'ticket.execution.requested',
           payload,
           createHash('sha256').update(payload).digest(),
+          ...(parsed.data.traceParent ? [parsed.data.traceParent] : []),
         ],
       );
       await client.query(

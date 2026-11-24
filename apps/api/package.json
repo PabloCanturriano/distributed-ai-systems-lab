@@ -16,7 +16,8 @@
     "@lab/configuration": "0.0.0",
     "pg": "8.23.1",
     "@redis/client": "6.3.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@lab/telemetry": "0.0.0"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"

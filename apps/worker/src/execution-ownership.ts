@@ -1,8 +1,10 @@
+import { validTraceParent } from '@lab/telemetry';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 
 export interface ExecutionClaim {
+  traceParent?: string;
   jobId: string;
   tenantId: string;
   ticketId: string;
@@ -18,6 +20,7 @@ export class ExecutionOwnershipError extends Error {
   }
 }
 interface LockedJob {
+  trace_parent: string | null;
   id: string;
   tenant_id: string;
   ticket_id: string;
@@ -177,7 +180,7 @@ export class ExecutionOwnership {
       data: { failureCode: code, attemptCount: job.attempt_count },
     });
     await client.query(
-      "INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,$4,'ticket.execution.failed',1,$5,$6)",
+      `INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest${validTraceParent(job.trace_parent) ? ',trace_parent' : ''}) VALUES($1,$2,$3,$4,'ticket.execution.failed',1,$5,$6${validTraceParent(job.trace_parent) ? ',$7' : ''})`,
       [
         eventId,
         job.tenant_id,
@@ -185,6 +188,7 @@ export class ExecutionOwnership {
         job.generation,
         payload,
         createHash('sha256').update(payload).digest(),
+        ...(validTraceParent(job.trace_parent) ? [job.trace_parent] : []),
       ],
     );
   }
@@ -242,6 +246,9 @@ export class ExecutionOwnership {
         [job.tenant_id, job.ticket_id, job.generation],
       );
       return {
+        ...(validTraceParent(job.trace_parent)
+          ? { traceParent: job.trace_parent! }
+          : {}),
         jobId: job.id,
         tenantId: job.tenant_id,
         ticketId: job.ticket_id,

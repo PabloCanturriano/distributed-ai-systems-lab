@@ -2,6 +2,7 @@ import { TextDecoder } from 'node:util';
 import { z } from 'zod';
 
 export interface SchedulingRecord {
+  traceParent?: string;
   topic: string;
   partition: number;
   offset: string;

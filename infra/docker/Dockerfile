@@ -6,6 +6,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/configuration/package.json packages/configuration/package.json
+COPY packages/telemetry/package.json packages/telemetry/package.json
 COPY database/package.json database/package.json
 
 FROM manifests AS build
@@ -19,7 +20,9 @@ COPY apps/worker/tsconfig.json apps/worker/tsconfig.json
 COPY apps/worker/src apps/worker/src
 COPY packages/configuration/tsconfig.json packages/configuration/tsconfig.json
 COPY packages/configuration/src packages/configuration/src
-RUN npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli
+COPY packages/telemetry/tsconfig.json packages/telemetry/tsconfig.json
+COPY packages/telemetry/src packages/telemetry/src
+RUN npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli
 
 FROM manifests AS api-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api
@@ -41,6 +44,8 @@ USER node
 
 FROM runtime AS api
 COPY --from=api-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/packages/telemetry/package.json ./packages/telemetry/package.json
+COPY --from=build /app/packages/telemetry/dist ./packages/telemetry/dist
 COPY --from=build /app/packages/configuration/package.json ./packages/configuration/package.json
 COPY --from=build /app/packages/configuration/dist ./packages/configuration/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
@@ -54,6 +59,8 @@ CMD ["node", "apps/api/dist/main.js"]
 # Select API or worker explicitly with --target; the worker exposes no HTTP port.
 FROM runtime AS worker
 COPY --from=worker-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/packages/telemetry/package.json ./packages/telemetry/package.json
+COPY --from=build /app/packages/telemetry/dist ./packages/telemetry/dist
 COPY --from=build /app/packages/configuration/package.json ./packages/configuration/package.json
 COPY --from=build /app/packages/configuration/dist ./packages/configuration/dist
 COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json

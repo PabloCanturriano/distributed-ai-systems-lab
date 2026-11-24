@@ -20,6 +20,11 @@
 !apps/worker/src/
 !apps/worker/src/**
 !packages/
+!packages/telemetry/
+!packages/telemetry/package.json
+!packages/telemetry/tsconfig.json
+!packages/telemetry/src/
+!packages/telemetry/src/**
 !packages/configuration/
 !packages/configuration/package.json
 !packages/configuration/tsconfig.json

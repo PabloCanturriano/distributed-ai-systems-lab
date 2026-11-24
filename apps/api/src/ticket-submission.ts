@@ -1,3 +1,4 @@
+import { validTraceParent } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ const inputSchema = z.strictObject({
   tenantId: z.uuid().transform((value) => value.toLowerCase()),
   principalId: z.uuid().transform((value) => value.toLowerCase()),
   requestId: z.uuid().transform((value) => value.toLowerCase()),
+  traceParent: z.unknown().optional().transform(validTraceParent),
   key: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
   body: z.strictObject({
     message: z
@@ -132,7 +134,7 @@ export class TicketSubmissions {
         data: { reason: 'submitted' },
       });
       await client.query(
-        'INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,1,$4,1,$5,$6)',
+        `INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest${parsed.data.traceParent ? ',trace_parent' : ''}) VALUES($1,$2,$3,1,$4,1,$5,$6${parsed.data.traceParent ? ',$7' : ''})`,
         [
           eventId,
           tenantId,
@@ -140,6 +142,7 @@ export class TicketSubmissions {
           'ticket.execution.requested',
           payload,
           createHash('sha256').update(payload).digest(),
+          ...(parsed.data.traceParent ? [parsed.data.traceParent] : []),
         ],
       );
       await client.query('COMMIT');

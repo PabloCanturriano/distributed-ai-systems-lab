@@ -989,3 +989,106 @@ test('the executor renews a real lease while provider work remains outside SQL a
   await Promise.resolve();
   expect(await readTicket(claim.ticketId)).toEqual(completed);
 }, 15000);
+test('optional trace origins survive outbox and job handoff without changing idempotency or payload identity', async () => {
+  const parent = '00-11111111111111111111111111111111-2222222222222222-01',
+    child = '00-11111111111111111111111111111111-3333333333333333-01';
+  const {
+    TicketSubmissions,
+  } = require('../../apps/api/dist/ticket-submission');
+  const store = new TicketSubmissions(apiPool),
+    input = {
+      tenantId: tenant,
+      principalId: principal,
+      requestId: randomUUID(),
+      key: randomUUID(),
+      body: { message: 'Fictional traced question' },
+      traceParent: parent,
+    };
+  const receipt = await store.submit(input);
+  expect(await store.submit({ ...input, traceParent: child })).toEqual(receipt);
+  const event = (
+    await migrator.query(
+      'SELECT payload,trace_parent FROM lab.outbox_events WHERE ticket_id=$1',
+      [receipt.ticketId],
+    )
+  ).rows[0];
+  expect(event.trace_parent).toBe(parent);
+  expect(JSON.parse(event.payload).traceparent).toBeUndefined();
+  const {
+    SchedulingAdmissions,
+  } = require('../../apps/worker/dist/scheduling-admissions');
+  const admissions = new SchedulingAdmissions(workerPool),
+    record = {
+      topic: 'tickets.execution-requested.v1',
+      partition: 0,
+      offset: '0',
+      key: Buffer.from(receipt.ticketId),
+      value: Buffer.from(event.payload),
+      traceParent: child,
+    };
+  expect(await admissions.admit(record)).toEqual({ disposition: 'scheduled' });
+  expect(await admissions.admit({ ...record, traceParent: parent })).toEqual({
+    disposition: 'duplicate',
+  });
+  const claim = await ownership().claim();
+  expect(claim.traceParent).toBe(child);
+  expect(await ownership().fail(claim.jobId, claim.attemptId)).toBe(true);
+  expect(
+    (
+      await migrator.query(
+        "SELECT trace_parent FROM lab.outbox_events WHERE type='ticket.execution.failed'",
+      )
+    ).rows[0].trace_parent,
+  ).toBe(child);
+  const client = await workerPool.connect();
+  try {
+    await client.query('SET ROLE lab_worker');
+    await expect(
+      client.query('UPDATE lab.execution_jobs SET trace_parent=$1', [parent]),
+    ).rejects.toMatchObject({ code: '42501' });
+  } finally {
+    client.release(true);
+  }
+});
+test('malformed trace metadata never prevents otherwise valid admission or completion', async () => {
+  const {
+    TicketSubmissions,
+  } = require('../../apps/api/dist/ticket-submission');
+  const receipt = await new TicketSubmissions(apiPool).submit({
+    tenantId: tenant,
+    principalId: principal,
+    requestId: randomUUID(),
+    key: randomUUID(),
+    body: { message: 'Fictional bad trace metadata question' },
+    traceParent: 'private-trace-fixture',
+  });
+  const event = (
+    await migrator.query('SELECT payload,trace_parent FROM lab.outbox_events')
+  ).rows[0];
+  expect(event.trace_parent).toBeNull();
+  const {
+    SchedulingAdmissions,
+  } = require('../../apps/worker/dist/scheduling-admissions');
+  expect(
+    await new SchedulingAdmissions(workerPool).admit({
+      topic: 'tickets.execution-requested.v1',
+      partition: 0,
+      offset: '0',
+      key: Buffer.from(receipt.ticketId),
+      value: Buffer.from(event.payload),
+      traceParent: 'private-trace-fixture',
+    }),
+  ).toEqual({ disposition: 'scheduled' });
+  const claim = await ownership().claim();
+  expect(claim.traceParent).toBeUndefined();
+  expect(
+    await ownership().complete(claim.jobId, claim.attemptId, abstention),
+  ).toBe(true);
+  expect(await readTicket(receipt.ticketId)).toMatchObject({
+    status: 'completed',
+  });
+  const raw = '00-' + '0'.repeat(32) + '-2222222222222222-01';
+  await expect(
+    migrator.query('UPDATE lab.execution_jobs SET trace_parent=$1', [raw]),
+  ).rejects.toMatchObject({ code: '23514' });
+});

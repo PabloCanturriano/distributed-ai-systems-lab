@@ -1,14 +1,14 @@
 # CLI contract and reviewer journey
 
-Status: proposed interface; none of the commands below are executable yet. The final README will contain only commands verified against a released Compose environment.
+Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are implemented locally and prepared for exact-patch review; see [review 0021](../quality/reviews/0021-ticket-cli.md). Replay, scenario and evaluation commands below remain proposed. No released environment is claimed.
 
 ## First-run journey
 
-The target startup is `docker compose up --build -d --wait`, followed by `docker compose run --rm cli demo`. The first command starts infrastructure, completes migrations and fictional seeds, and waits for the required services. The second demonstrates a ticket from submission to answer. A reviewer needs Git and Docker Compose, not a local Node.js installation or an AI API key.
+The implemented startup uses both `messaging` and `execution` profiles, followed by an explicitly built, on-demand CLI. See the [verified local commands](../operations/ticket-cli.md). The original target of a default-profile full workflow remains future work. The guide builds the CLI, starts infrastructure with migrations/seeds and then demonstrates a ticket from submission to its simulated result. A reviewer needs Git and Docker Compose, not a local Node.js installation or an AI API key.
 
 The CLI prints the selected fictional tenant/role alias, simulated or real mode, ticket ID, progress, answer/abstention, citations, tool names, and trace lookup information. It never displays bearer credentials, prompts, or raw tool payloads. It distinguishes scenario failure from unavailable infrastructure and polling deadline expiry.
 
-## Proposed commands
+## Command contract (partially implemented)
 
 All business commands call the API. Names below are CLI arguments after `docker compose run --rm cli`:
 
@@ -23,7 +23,7 @@ All business commands call the API. Names below are CLI arguments after `docker 
 | `scenario run <name>` | Execute an API-only workflow or evaluate host-prepared recovery evidence |
 | `evaluate --suite workflow` | Evaluate black-box scripted ticket behavior over HTTP; does not run internal retrieval benchmarks |
 
-Global options: `--identity <alias>`, `--json`, `--no-color`, `--deadline <seconds>`, and `--help`. Endpoint selection is explicit and follows the security policy; the CLI does not forward credentials across redirects. Secret tokens are read from the dedicated local volume, never passed as CLI arguments.
+Implemented global options: `--identity <alias>`, `--json`, `--no-color`, `--deadline <seconds>`, and `--help`. This slice fixes the endpoint to `http://api:3000` on the trusted Compose backend; no remote endpoint option is implemented. The CLI does not forward credentials across redirects. Secret tokens are read from the dedicated local volume, never passed as CLI arguments.
 
 JSON output is one final object on stdout; progress goes to stderr. The object includes schema version, command, outcome, request/ticket/generation IDs where available, elapsed time, and safe error details. Color and progress animations are disabled in non-interactive output. Errors and assertion failures never print a success banner.
 

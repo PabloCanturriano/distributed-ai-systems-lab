@@ -273,6 +273,24 @@ services:
     mem_limit: 256m
     stop_grace_period: 15s
 
+  cli:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: cli
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    volumes:
+      - demo_credentials:/run/lab/demo:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    stop_grace_period: 5s
+
 networks:
   ingress: {}
   backend:

@@ -58,6 +58,7 @@ jobs:
       - run: npm run test:relay
       - run: npm run test:consumer
       - run: npm run test:executor
+      - run: npm run test:cli
 
   kafka-client:
     name: Native client, relay and consumer on Linux ARM64
@@ -81,6 +82,7 @@ jobs:
       - run: npm run test:relay
       - run: npm run test:consumer
       - run: npm run test:executor
+      - run: npm run test:cli
 
   foundation:
     name: Foundation gate

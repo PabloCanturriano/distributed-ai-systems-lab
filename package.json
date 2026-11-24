@@ -11,7 +11,7 @@
     "node": ">=24.22.3 <25"
   },
   "scripts": {
-    "build": "npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/database",
+    "build": "npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/database --workspace=@lab/cli",
     "typecheck": "npm run build --workspace=@lab/configuration && npm run typecheck --workspaces",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -24,7 +24,8 @@
     "test:kafka-client": "node scripts/kafka-client-smoke.mjs",
     "test:relay": "node scripts/relay-smoke.mjs",
     "test:consumer": "node scripts/consumer-smoke.mjs",
-    "test:executor": "node scripts/executor-smoke.mjs"
+    "test:executor": "node scripts/executor-smoke.mjs",
+    "test:cli": "node scripts/cli-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

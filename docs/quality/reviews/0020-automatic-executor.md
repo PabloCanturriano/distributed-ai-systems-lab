@@ -1,6 +1,6 @@
 # Automatic simulated executor and end-to-end verification
 
-Status: implemented and locally verified, pending exact-patch approval under the accepted ADR-0001/0002/0003 architecture. Base `354b29c` is committed and pushed. Proposed commit: `feat: run automatic simulated execution with end-to-end verification`.
+Status: approved, committed and pushed as `284ee23` (`feat: run automatic simulated execution with end-to-end verification`). The [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45222243662), including the executor journey on x64 and ARM64. The evidence below records this slice at implementation time.
 
 ## Purpose and affected files
 
@@ -35,4 +35,4 @@ This is deterministic workflow evidence. It does not implement retrieval, suppor
 
 The 60-second deadline bounds provider/heartbeat work and is checked monotonically before finalization. SQL finalization has separate finite timeouts and may commit after that instant or return an uncertain acknowledgement. Lost ownership and shutdown take precedence over retry decisions. A 12-second shutdown deadline may force exit if cleanup cannot finish, leaving durable leases to recover; Compose allows 15 seconds. Fencing prevents stale durable writes, not repeated external effects after a crash.
 
-The complete patch, including all new files, requires owner approval before commit: [AGENTS.md](../../../AGENTS.md) states, “Commits containing application code, tests, dependencies, runtime configuration, or other non-documentation changes require the owner's explicit approval of the exact patch before committing.” Push permission is already granted. No commit or push of this patch has been performed.
+At preparation time, the complete patch required owner approval before commit: [AGENTS.md](../../../AGENTS.md) states, “Commits containing application code, tests, dependencies, runtime configuration, or other non-documentation changes require the owner's explicit approval of the exact patch before committing.” The owner subsequently approved this exact patch; it is now committed and pushed as recorded above.

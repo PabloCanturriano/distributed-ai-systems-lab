@@ -26,7 +26,7 @@ A credential consists of a non-secret lookup ID and a cryptographically generate
 
 The seed/bootstrap process creates credentials on first initialization and writes the raw local demo credentials to a dedicated shared volume. Only trusted volume preparation/seeding and the future CLI mount that volume; the API resolves credential digests through PostgreSQL. Existing local data must not silently generate replacement credentials on every startup. A missing credential volume with an existing database is a provisioning error requiring explicit recovery or reset.
 
-The trusted seed operation now persists six fictional identities and private raw secret material, with file/database consistency checks. Compose credential-volume wiring is implemented and HTTP verification is prepared for review; CLI use remains unimplemented; see the [implemented provisioning protocol](../operations/local-identities.md).
+The trusted seed operation now persists six fictional identities and private raw secret material, with file/database consistency checks. Compose credential-volume wiring is implemented and HTTP verification is prepared for review; the [prepared CLI](../operations/ticket-cli.md) reads this volume privately; see the [implemented provisioning protocol](../operations/local-identities.md).
 
 The CLI selects an identity by a non-secret alias, reads its credential from the volume, and injects the bearer header. Do not pass secrets in CLI arguments, URLs, or committed files. Manual HTTP examples can describe local credential retrieval without printing credentials during normal startup. The default interactive demo uses a requester; replay scenarios explicitly select an operator.
 

@@ -1,16 +1,16 @@
 # CI, release, and deployment plan
 
-Status: the committed foundation workflow passed for `354b29c` ([hosted run](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45106618466)). The automatic executor gate is prepared for exact-patch review and has local evidence only. Registry publishing, release, hosted deployment and the complete acceptance pipeline remain planned.
+Status: the committed foundation workflow passed for `284ee23` ([hosted run](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45222243662)), including automatic execution on x64 and ARM64. The CLI gate is prepared for exact-patch review and has local evidence only. Registry publishing, release, hosted deployment and the complete acceptance pipeline remain planned.
 
 ## Foundation workflow
 
 `.github/workflows/foundation.yml` runs on pull requests, pushes to main and manual dispatch. It uses fixed action revisions, Node 24.22.3, read-only repository permissions, disabled checkout credential persistence, disabled package caching and finite job deadlines. It receives no provider/registry secrets and performs no publication or deployment.
 
-The checks job runs formatting, type/build and fast tests. The integration job runs PostgreSQL, application-image, Compose, native Kafka-tool, relay and consumer suites sequentially on Ubuntu 24.04 x64. A separate Ubuntu 24.04 ARM64 job runs the isolated client evaluation, relay and consumer suites with their pinned native artifacts. The proposed executor patch adds `npm run test:executor` after the consumer gate on both architectures, with job deadlines of 40 minutes (x64) and 30 minutes (ARM64). It uses Node built-ins on the host and image-built application code. See [review 0020](reviews/0020-automatic-executor.md) for the local arm64 evidence and limitations; the new gate has not run in hosted CI.
+The checks job runs formatting, type/build and fast tests. The integration job runs PostgreSQL, application-image, Compose, native Kafka-tool, relay and consumer suites sequentially on Ubuntu 24.04 x64. A separate Ubuntu 24.04 ARM64 job runs the isolated client evaluation, relay and consumer suites with their pinned native artifacts. The executor gate runs after the consumer gate on both architectures, with job deadlines of 40 minutes (x64) and 30 minutes (ARM64). It uses Node built-ins on the host and image-built application code. See [review 0020](reviews/0020-automatic-executor.md) for scope and limitations. The proposed CLI patch adds `npm run test:cli` after the executor gate on both architectures; [review 0021](reviews/0021-ticket-cli.md) records local evidence. The new CLI gate has not run in hosted CI.
 
 The final `Foundation gate` requires every preceding job to succeed, including when another job fails or is skipped. Repository branch protection is not configured by this patch. No logs, credential volumes or snapshots are uploaded as artifacts. Remaining security, AI, scan and release gates below are not represented as passing by this foundation workflow.
 
-Validation: `actionlint` 1.7.12 reported no errors for the changed workflow. Local formatting, type/build, unit, PostgreSQL, executor and default Compose checks passed. Hosted baseline success does not establish hosted success for this uncommitted patch.
+Validation: `actionlint` 1.7.12 reported no errors for the changed workflow. Local formatting, type/build, unit, PostgreSQL, executor and default Compose checks passed for that baseline; the CLI patch records its own validation in review 0021. Hosted baseline success does not establish hosted success for this uncommitted patch.
 
 ## Pull requests
 

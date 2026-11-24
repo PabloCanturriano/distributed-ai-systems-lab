@@ -4,6 +4,11 @@
 !package-lock.json
 !tsconfig.base.json
 !apps/
+!apps/cli/
+!apps/cli/package.json
+!apps/cli/tsconfig.json
+!apps/cli/src/
+!apps/cli/src/**
 !apps/api/
 !apps/api/package.json
 !apps/api/tsconfig.json

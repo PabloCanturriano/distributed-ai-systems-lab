@@ -3,6 +3,7 @@ FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY apps/cli/package.json apps/cli/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/configuration/package.json packages/configuration/package.json
 COPY database/package.json database/package.json
@@ -10,19 +11,24 @@ COPY database/package.json database/package.json
 FROM manifests AS build
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY tsconfig.base.json ./
+COPY apps/cli/tsconfig.json apps/cli/tsconfig.json
+COPY apps/cli/src apps/cli/src
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/src apps/api/src
 COPY apps/worker/tsconfig.json apps/worker/tsconfig.json
 COPY apps/worker/src apps/worker/src
 COPY packages/configuration/tsconfig.json packages/configuration/tsconfig.json
 COPY packages/configuration/src packages/configuration/src
-RUN npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker
+RUN npm run build --workspace=@lab/configuration && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli
 
 FROM manifests AS api-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api
 
 FROM manifests AS worker-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/worker
+
+FROM manifests AS cli-dependencies
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/cli
 
 FROM worker-dependencies AS relay-dependencies
 COPY infra/docker/prepare-kafka-native.mjs /tmp/prepare-kafka-native.mjs
@@ -63,6 +69,14 @@ CMD ["node", "apps/worker/dist/relay-main.js"]
 
 FROM relay AS consumer
 CMD ["node", "apps/worker/dist/consumer-main.js"]
+
+# The CLI has Commander and no database/native runtime dependencies.
+FROM runtime AS cli
+COPY --from=cli-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/apps/cli/dist ./apps/cli/dist
+ENTRYPOINT ["node", "apps/cli/dist/main.js"]
+CMD ["--help"]
+
 
 FROM manifests AS database-build
 RUN npm ci --ignore-scripts --no-audit --no-fund

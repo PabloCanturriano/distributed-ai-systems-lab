@@ -53,6 +53,7 @@ const messages: Record<string, string> = {
   UNAUTHENTICATED: 'Authentication is required.',
   FORBIDDEN: 'This operation is not permitted.',
   NOT_FOUND: 'Ticket not found.',
+  REPLAY_CONFLICT: 'Ticket is not failed at the expected generation.',
   IDEMPOTENCY_CONFLICT: 'This key was already used with different input.',
   INVALID_REQUEST: 'Request is invalid.',
   PAYLOAD_TOO_LARGE: 'Request body exceeds the allowed size.',
@@ -64,7 +65,7 @@ const messages: Record<string, string> = {
   ATTEMPTS_EXHAUSTED: 'Execution attempts exhausted.',
 };
 export const help =
-  'Usage: cli demo | ticket create --message <text> [--key <key>] | ticket get <id> | ticket wait <id>\nOptions: --identity <alias> --deadline <1..300 seconds> --json --no-color --help\nDefault identity: harbor.requester. Endpoint: fixed local http://api:3000. Results are simulated.\nReplay, scenarios and evaluation are not implemented.';
+  'Usage: cli demo | ticket create --message <text> [--key <key>] | ticket get <id> | ticket wait <id> | ticket replay <id> --generation <n> --key <key>\nOptions: --identity <alias> --deadline <1..300 seconds> --json --no-color --help\nDefault identity: harbor.requester. Endpoint: fixed local http://api:3000. Results are simulated.\nScenarios and evaluation are not implemented.';
 function invalid(): never {
   throw new CliError('INVALID_ARGUMENTS', 2);
 }
@@ -82,7 +83,8 @@ function text(value: unknown, max: number): value is string {
     !value.includes('\0')
   );
 }
-type Command = 'demo' | 'ticket create' | 'ticket get' | 'ticket wait';
+type Command =
+  'demo' | 'ticket create' | 'ticket get' | 'ticket wait' | 'ticket replay';
 function parse(args: string[]):
   | { command: 'help'; json: boolean }
   | {
@@ -93,6 +95,7 @@ function parse(args: string[]):
       id: string | undefined;
       message: string | undefined;
       key: string | undefined;
+      expectedGeneration: number | undefined;
     } {
   // Reject duplicate switches explicitly; repeated identity/key selection must
   // never silently change which credential or retry key is used.
@@ -125,6 +128,15 @@ function parse(args: string[]):
     .option('--key <key>')
     .action((_options: unknown, command: Commander) => {
       selected = command;
+    });
+  group
+    .command('replay')
+    .argument('<ticket-id>')
+    .requiredOption('--generation <number>')
+    .requiredOption('--key <key>')
+    .action((value: string, _options: unknown, command: Commander) => {
+      selected = command;
+      id = value;
     });
   for (const name of ['get', 'wait'])
     group
@@ -161,6 +173,13 @@ function parse(args: string[]):
   if (key !== undefined && !/^[A-Za-z0-9._-]{1,128}$/.test(key)) invalid();
   const identity = String(options.identity);
   if (!aliases.test(identity)) invalid();
+  let expectedGeneration: number | undefined;
+  if (command === 'ticket replay') {
+    const value = String(options.generation);
+    if (!/^[1-9][0-9]{0,9}$/.test(value) || Number(value) > 2147483646)
+      invalid();
+    expectedGeneration = Number(value);
+  }
   const seconds = String(options.deadline);
   if (
     !/^\d{1,3}$/.test(seconds) ||
@@ -175,19 +194,20 @@ function parse(args: string[]):
     key,
     identity,
     deadline: Number(seconds) * 1000,
+    expectedGeneration,
     json: options.json === true,
   } as const;
 }
-function receipt(value: unknown): Record<string, unknown> {
+function receipt(value: unknown, generation = 1): Record<string, unknown> {
   const v = object(value);
   if (
     typeof v.ticketId !== 'string' ||
     !uuid.test(v.ticketId) ||
-    v.generation !== 1 ||
+    v.generation !== generation ||
     v.statusUrl !== `/v1/tickets/${v.ticketId}`
   )
     throw new CliError('INVALID_RESPONSE', 4);
-  return { ticketId: v.ticketId, generation: 1, statusUrl: v.statusUrl };
+  return { ticketId: v.ticketId, generation, statusUrl: v.statusUrl };
 }
 function ticket(value: unknown, expectedId: string): Record<string, unknown> {
   const v = object(value);
@@ -263,7 +283,7 @@ const errorCodes: Record<number, string[]> = {
   401: ['UNAUTHENTICATED'],
   403: ['FORBIDDEN'],
   404: ['NOT_FOUND'],
-  409: ['IDEMPOTENCY_CONFLICT'],
+  409: ['IDEMPOTENCY_CONFLICT', 'REPLAY_CONFLICT'],
   413: ['PAYLOAD_TOO_LARGE'],
   415: ['UNSUPPORTED_MEDIA_TYPE'],
   429: ['RATE_LIMITED'],
@@ -293,10 +313,15 @@ export async function runCli(
       output.help = help;
     } else {
       output.identity = p.identity;
-      if (p.command === 'ticket create' || p.command === 'demo')
+      if (
+        p.command === 'ticket create' ||
+        p.command === 'demo' ||
+        p.command === 'ticket replay'
+      )
         output.key = p.key ?? (deps.key ?? randomUUID)();
       const expires = started + p.deadline;
       const message = p.message;
+      const expectedGeneration = p.expectedGeneration;
       function remaining() {
         if (deps.signal?.aborted) throw new CliError('INTERRUPTED', 4);
         const left = Math.floor(expires - now());
@@ -326,27 +351,32 @@ export async function runCli(
         throw new CliError('CREDENTIAL_UNAVAILABLE', 3);
       }
       remaining();
-      async function request(id?: string): Promise<unknown> {
+      async function request(id?: string, replay = false): Promise<unknown> {
+        const mutation = id === undefined || replay;
         for (let attempt = 0; ; attempt++) {
           const left = remaining();
           let response: Response;
           try {
             response = await (deps.fetch ?? fetch)(
-              `http://api:3000/v1/tickets${id === undefined ? '' : '/' + id}`,
+              `http://api:3000/v1/tickets${id === undefined ? '' : '/' + id}${replay ? '/replays' : ''}`,
               {
-                method: id === undefined ? 'POST' : 'GET',
+                method: mutation ? 'POST' : 'GET',
                 redirect: 'manual',
                 headers: {
                   authorization: `Bearer ${credential.lookupId}.${credential.secret}`,
-                  ...(id === undefined
+                  ...(mutation
                     ? {
                         'content-type': 'application/json',
                         'idempotency-key': output.key!,
                       }
                     : {}),
                 },
-                ...(id === undefined
-                  ? { body: JSON.stringify({ message }) }
+                ...(mutation
+                  ? {
+                      body: JSON.stringify(
+                        replay ? { expectedGeneration } : { message },
+                      ),
+                    }
                   : {}),
                 signal: AbortSignal.any([
                   AbortSignal.timeout(Math.min(5000, left)),
@@ -419,7 +449,7 @@ export async function runCli(
           const requestId = response.headers.get('x-request-id');
           if (requestId && uuid.test(requestId)) output.requestId = requestId;
           // Never return raw API errors or unknown response fields.
-          if (response.status !== (id === undefined ? 202 : 200)) {
+          if (response.status !== (mutation ? 202 : 200)) {
             const code = object(object(value).error).code;
             if (
               typeof code !== 'string' ||
@@ -440,11 +470,14 @@ export async function runCli(
       }
       let id = p.id;
       if (output.key !== undefined) {
-        output.ticket = receipt(await request());
+        output.ticket =
+          p.command === 'ticket replay'
+            ? receipt(await request(p.id, true), expectedGeneration! + 1)
+            : receipt(await request());
         output.outcome = 'accepted';
         id = output.ticket.ticketId as string;
       }
-      if (p.command !== 'ticket create') {
+      if (p.command !== 'ticket create' && p.command !== 'ticket replay') {
         for (;;) {
           output.ticket = ticket(await request(id), id!);
           const status = output.ticket.status;

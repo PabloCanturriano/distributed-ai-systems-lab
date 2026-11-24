@@ -25,7 +25,8 @@
     "test:relay": "node scripts/relay-smoke.mjs",
     "test:consumer": "node scripts/consumer-smoke.mjs",
     "test:executor": "node scripts/executor-smoke.mjs",
-    "test:cli": "node scripts/cli-smoke.mjs"
+    "test:cli": "node scripts/cli-smoke.mjs",
+    "test:replay": "node scripts/replay-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

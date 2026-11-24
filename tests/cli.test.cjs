@@ -346,3 +346,72 @@ test.each([
     expect(d.credential).not.toHaveBeenCalled();
   },
 );
+test('replay requires explicit generation and key and retains both on lost-response retry', async () => {
+  const fetch = jest
+    .fn()
+    .mockRejectedValueOnce(new Error('lost acknowledgement'))
+    .mockResolvedValueOnce(response({ ...receipt, generation: 2 }, 202));
+  const r = await runCli(
+    [
+      'ticket',
+      'replay',
+      id,
+      '--generation',
+      '1',
+      '--key',
+      'replay-key',
+      '--identity',
+      'harbor.operator',
+      '--json',
+    ],
+    deps(fetch),
+  );
+  expect(r.exitCode).toBe(0);
+  expect(r.output).toMatchObject({
+    command: 'ticket replay',
+    outcome: 'accepted',
+    key: 'replay-key',
+    ticket: { generation: 2 },
+  });
+  for (const [url, options] of fetch.mock.calls) {
+    expect(url).toBe(`http://api:3000/v1/tickets/${id}/replays`);
+    expect(options.method).toBe('POST');
+    expect(options.headers['idempotency-key']).toBe('replay-key');
+    expect(options.body).toBe('{"expectedGeneration":1}');
+  }
+});
+test.each([
+  ['--generation', '1'],
+  ['--key', 'stable-key'],
+  ['--generation', '0', '--key', 'k'],
+  ['--generation', '2147483647', '--key', 'k'],
+  ['--generation', '1.5', '--key', 'k'],
+  ['--generation', '1', '--key', 'k', '--message', 'extra'],
+])('invalid replay options fail before credentials: %j', async (...options) => {
+  const d = deps(jest.fn());
+  const r = await runCli(['ticket', 'replay', id, ...options], d);
+  expect(r.exitCode).toBe(2);
+  expect(d.credential).not.toHaveBeenCalled();
+  expect(d.fetch).not.toHaveBeenCalled();
+});
+test('replay conflicts are not retried and preserve the key', async () => {
+  const fetch = jest.fn(async () =>
+    response({ error: { code: 'REPLAY_CONFLICT', message: 'private' } }, 409),
+  );
+  const r = await runCli(
+    ['ticket', 'replay', id, '--generation', '1', '--key', 'stable-key'],
+    deps(fetch),
+  );
+  expect(r.exitCode).toBe(2);
+  expect(r.output.key).toBe('stable-key');
+  expect(r.output.error.code).toBe('REPLAY_CONFLICT');
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+test('a replay receipt for an unexpected generation is rejected', async () => {
+  const r = await runCli(
+    ['ticket', 'replay', id, '--generation', '1', '--key', 'k'],
+    deps(jest.fn(async () => response({ ...receipt, generation: 3 }, 202))),
+  );
+  expect(r.exitCode).toBe(4);
+  expect(r.output.error.code).toBe('INVALID_RESPONSE');
+});

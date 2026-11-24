@@ -203,10 +203,13 @@ async function fixture(overrides, action) {
     await app.close();
   }
 }
-function raw(url, { headers = {}, body = '', chunked = false } = {}) {
+function raw(
+  url,
+  { headers = {}, body = '', chunked = false, path = '/v1/tickets' } = {},
+) {
   return new Promise((resolve, reject) => {
     const request = httpRequest(
-      `${url}/v1/tickets`,
+      `${url}${path}`,
       { method: 'POST', headers },
       (response) => {
         const chunks = [];
@@ -396,4 +399,209 @@ test('standalone mode rejects business writes instead of granting fallback acces
   } finally {
     await app.close();
   }
+});
+const { TicketReplayError } = require('../apps/api/dist/ticket-replay');
+test('operator replay uses server identity, a fresh request ID, bounded body and the route ticket', async () => {
+  const identity = {
+      tenantId: randomUUID(),
+      principalId: randomUUID(),
+      role: 'operator',
+    },
+    id = randomUUID(),
+    key = randomUUID();
+  let called = 0;
+  await fixture(
+    {
+      authenticate: async () => identity,
+      checkSubmissionLimit: async (value) => expect(value).toEqual(identity),
+      replay: async (input) => {
+        called++;
+        expect(input).toMatchObject({
+          tenantId: identity.tenantId,
+          principalId: identity.principalId,
+          ticketId: id,
+          key,
+          body: { expectedGeneration: 1 },
+        });
+        expect(input.requestId).toMatch(/^[0-9a-f-]{36}$/);
+        return { ticketId: id, generation: 2, statusUrl: `/v1/tickets/${id}` };
+      },
+    },
+    async (url) => {
+      const r = await fetch(`${url}/v1/tickets/${id}/replays`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ expectedGeneration: 1 }),
+      });
+      expect(r.status).toBe(202);
+      expect(r.headers.get('location')).toBe(`/v1/tickets/${id}`);
+      expect(r.headers.get('cache-control')).toBe('no-store');
+      expect((await r.json()).generation).toBe(2);
+      expect(called).toBe(1);
+    },
+  );
+});
+test.each(['reader', 'requester'])(
+  '%s cannot replay even with a valid-looking body',
+  async (role) => {
+    const replay = jest.fn();
+    await fixture(
+      {
+        authenticate: async () => ({
+          tenantId: randomUUID(),
+          principalId: randomUUID(),
+          role,
+        }),
+        replay,
+      },
+      async (url) => {
+        const r = await fetch(`${url}/v1/tickets/${randomUUID()}/replays`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{"expectedGeneration":1}',
+        });
+        expect(r.status).toBe(403);
+        expect(replay).not.toHaveBeenCalled();
+      },
+    );
+  },
+);
+test.each([
+  ['NOT_FOUND', 404],
+  ['REPLAY_CONFLICT', 409],
+  ['IDEMPOTENCY_CONFLICT', 409],
+  ['INVALID_REQUEST', 400],
+  ['DEPENDENCY_UNAVAILABLE', 503],
+])('replay %s preserves safe code and headers', async (code, status) => {
+  await fixture(
+    {
+      authenticate: async () => ({
+        tenantId: randomUUID(),
+        principalId: randomUUID(),
+        role: 'operator',
+      }),
+      replay: async () => {
+        throw new TicketReplayError(code);
+      },
+    },
+    async (url) => {
+      const r = await fetch(`${url}/v1/tickets/${randomUUID()}/replays`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"expectedGeneration":1}',
+      });
+      expect(r.status).toBe(status);
+      const b = await r.json();
+      expect(b.error.code).toBe(code);
+      expect(b.error.requestId).toBe(r.headers.get('x-request-id'));
+      expect(r.headers.get('cache-control')).toBe('no-store');
+    },
+  );
+});
+test('replay limits run before body parsing or SQL mutation', async () => {
+  const replay = jest.fn();
+  await fixture(
+    {
+      authenticate: async () => ({
+        tenantId: randomUUID(),
+        principalId: randomUUID(),
+        role: 'operator',
+      }),
+      checkSubmissionLimit: async () => {
+        throw new TicketAccessError('RATE_LIMITED', 4);
+      },
+      replay,
+    },
+    async (url) => {
+      const r = await fetch(`${url}/v1/tickets/${randomUUID()}/replays`, {
+        method: 'POST',
+        body: 'malformed',
+      });
+      expect(r.status).toBe(429);
+      expect(r.headers.get('retry-after')).toBe('4');
+      expect(replay).not.toHaveBeenCalled();
+    },
+  );
+});
+test('replay authentication failure precedes mutation limits and body parsing', async () => {
+  const replay = jest.fn(),
+    checkSubmissionLimit = jest.fn();
+  await fixture(
+    {
+      authenticate: async () => {
+        throw new TicketAccessError('UNAUTHENTICATED');
+      },
+      checkSubmissionLimit,
+      replay,
+    },
+    async (url) => {
+      const r = await fetch(`${url}/v1/tickets/${randomUUID()}/replays`, {
+        method: 'POST',
+        body: 'malformed',
+      });
+      expect(r.status).toBe(401);
+      expect(r.headers.get('www-authenticate')).toBe('Bearer');
+      expect(checkSubmissionLimit).not.toHaveBeenCalled();
+      expect(replay).not.toHaveBeenCalled();
+    },
+  );
+});
+test.each([
+  [{ 'content-type': 'text/plain' }, '{}', 415],
+  [{ 'content-type': 'application/json' }, '{', 400],
+  [
+    { 'content-type': 'application/json', 'content-length': '20000' },
+    '{}',
+    413,
+  ],
+])('replay preserves HTTP body/media bounds', async (headers, body, status) => {
+  const replay = jest.fn();
+  await fixture(
+    {
+      authenticate: async () => ({
+        tenantId: randomUUID(),
+        principalId: randomUUID(),
+        role: 'operator',
+      }),
+      replay,
+    },
+    async (url) => {
+      const r = await raw(url, {
+        path: `/v1/tickets/${randomUUID()}/replays`,
+        headers,
+        body,
+        chunked: false,
+      });
+      expect(r.status).toBe(status);
+      expect(replay).not.toHaveBeenCalled();
+    },
+  );
+});
+test('replay rejects duplicate authorization and idempotency headers before mutation', async () => {
+  const replay = jest.fn();
+  await fixture(
+    {
+      authenticate: async () => ({
+        tenantId: randomUUID(),
+        principalId: randomUUID(),
+        role: 'operator',
+      }),
+      replay,
+    },
+    async (url) => {
+      const path = `/v1/tickets/${randomUUID()}/replays`;
+      for (const [headers, status] of [
+        [{ authorization: ['Bearer first', 'Bearer second'] }, 401],
+        [{ 'idempotency-key': ['first', 'second'] }, 400],
+      ]) {
+        const r = await raw(url, {
+          path,
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: '{"expectedGeneration":1}',
+        });
+        expect(r.status).toBe(status);
+      }
+      expect(replay).not.toHaveBeenCalled();
+    },
+  );
 });

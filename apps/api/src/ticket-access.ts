@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { TicketSubmissions, type TicketReceipt } from './ticket-submission';
 import { TicketReads, type TicketStatus } from './ticket-read';
+import { TicketReplays, type ReplayReceipt } from './ticket-replay';
 
 export interface TicketIdentity {
   tenantId: string;
@@ -29,6 +30,7 @@ export interface TicketService {
   checkReadLimit(identity: TicketIdentity): Promise<void>;
   getTicket(identity: TicketIdentity, ticketId: string): Promise<TicketStatus>;
   submit(input: unknown): Promise<TicketReceipt>;
+  replay(input: unknown): Promise<ReplayReceipt>;
 }
 const lookupSchema = z.uuid();
 const roleSchema = z.enum(['reader', 'requester', 'operator']);
@@ -38,12 +40,14 @@ const opaqueKey = (value: string) =>
 export class TicketAccess implements TicketService {
   private readonly submissions: TicketSubmissions;
   private readonly reads: TicketReads;
+  private readonly replays: TicketReplays;
   constructor(
     private readonly pool: Pick<Pool, 'connect'>,
     private readonly limits: SubmissionLimits,
   ) {
     this.submissions = new TicketSubmissions(pool);
     this.reads = new TicketReads(pool);
+    this.replays = new TicketReplays(pool);
   }
   checkIngress(peer: string): Promise<void> {
     return this.limits.consume([
@@ -61,6 +65,9 @@ export class TicketAccess implements TicketService {
   }
   submit(input: unknown): Promise<TicketReceipt> {
     return this.submissions.submit(input);
+  }
+  replay(input: unknown): Promise<ReplayReceipt> {
+    return this.replays.replay(input);
   }
   checkReadLimit(identity: TicketIdentity): Promise<void> {
     return this.limits.consume([

@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { TicketAccessError, type TicketService } from './ticket-access';
 import { TicketSubmissionError } from './ticket-submission';
 import { TicketReadError } from './ticket-read';
+import { TicketReplayError } from './ticket-replay';
 
 export const TICKET_SERVICE = Symbol('ticket-service');
 const messages = {
@@ -15,6 +16,7 @@ const messages = {
     409,
     'This key was already used with different input.',
   ],
+  REPLAY_CONFLICT: [409, 'Ticket is not failed at the expected generation.'],
   PAYLOAD_TOO_LARGE: [413, 'Request body exceeds the allowed size.'],
   UNSUPPORTED_MEDIA_TYPE: [
     415,
@@ -127,6 +129,41 @@ export class TicketController {
       this.failure(response, error, requestId);
     }
   }
+  @Post(':ticketId/replays')
+  async replay(
+    @Req() request: IncomingMessage,
+    @Res() response: ServerResponse,
+    @Param('ticketId') ticketId: string,
+  ): Promise<void> {
+    const requestId = this.headers(response);
+    try {
+      const { service, identity } = await this.identify(request);
+      if (identity.role !== 'operator') throw new RequestError('FORBIDDEN');
+      // Replay consumes the same mutation/principal budget as submission.
+      await service.checkSubmissionLimit(identity);
+      if (
+        request.rawHeaders.filter(
+          (value, index) =>
+            index % 2 === 0 && value.toLowerCase() === 'idempotency-key',
+        ).length > 1
+      )
+        throw new RequestError('INVALID_REQUEST');
+      const body = await jsonBody(request);
+      const receipt = await service.replay({
+        tenantId: identity.tenantId,
+        principalId: identity.principalId,
+        ticketId,
+        requestId,
+        key: request.headers['idempotency-key'],
+        body,
+      });
+      response.statusCode = 202;
+      response.setHeader('Location', receipt.statusUrl);
+      response.end(JSON.stringify(receipt));
+    } catch (error) {
+      this.failure(response, error, requestId);
+    }
+  }
   @Get(':ticketId')
   async read(
     @Req() request: IncomingMessage,
@@ -174,7 +211,8 @@ export class TicketController {
       error instanceof RequestError ||
       error instanceof TicketAccessError ||
       error instanceof TicketSubmissionError ||
-      error instanceof TicketReadError
+      error instanceof TicketReadError ||
+      error instanceof TicketReplayError
         ? error.code
         : 'INTERNAL_ERROR';
     const [status, message] = messages[code];

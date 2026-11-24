@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: authenticated submission, reads, admission, real Kafka consumption, fenced simulated completion, automatic execution and ticket CLI are committed. [Operator replay](../quality/reviews/0022-ticket-replay-batch.md) is implemented locally and prepared for batch review. Supported results remain simulated insufficient-evidence responses and allowlisted failures; answered/cited results and real-model work remain planned. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
+Status: authenticated submission, reads, admission, real Kafka consumption, fenced simulated completion, automatic execution and ticket CLI are committed. [Operator replay](../quality/reviews/0022-ticket-replay-batch.md) is committed; [manual trace correlation and phase-2 closure](../quality/phase2.md) are prepared for final owner review. Supported results remain simulated insufficient-evidence responses and allowlisted failures; answered/cited results and real-model work remain planned. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
 
 ## Common HTTP rules
 
@@ -8,7 +8,7 @@ Business routes use `/v1`, JSON, and bearer authentication. Credentials resolve 
 
 IDs are UUID strings. Timestamps use UTC ISO 8601 strings. Generations are positive integers starting at 1. Request objects reject unknown properties. JSON mutation bodies are limited to 16 KiB; unsupported content types return `415`, oversized bodies `413`, and malformed or invalid input `400`.
 
-Business responses include a server-generated `X-Request-Id` and `Cache-Control: no-store`. Requests and responses must not echo bearer tokens. Authenticated mutation and read endpoints are subject to rate limits: `429` when exceeded, or `503` if the required limiter is unavailable. Retriable HTTP responses may include `Retry-After` in integer seconds.
+Business responses include a server-generated `X-Request-Id` and `Cache-Control: no-store`. Requests and responses must not echo bearer tokens. When manual tracing is active, responses also carry a validated `traceparent` and `X-Trace-Id`; these are optional diagnostic headers and do not alter the receipt or authorization. Authenticated mutation and read endpoints are subject to rate limits: `429` when exceeded, or `503` if the required limiter is unavailable. Retriable HTTP responses may include `Retry-After` in integer seconds.
 
 ## Routes
 

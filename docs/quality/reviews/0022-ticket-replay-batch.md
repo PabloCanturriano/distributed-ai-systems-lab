@@ -1,6 +1,6 @@
 # Operator ticket replay: proposed commit batch
 
-Status: implemented and locally verified, pending owner approval of the complete patches before commits. Base `2f69c99` is committed and pushed; its [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45478107145), including CLI on x64 and ARM64. The owner requested several related advances and a grouped commit list. This batch implements the existing replay contract under accepted ADR-0001/0002/0004; it does not introduce a new architecture or dependency.
+Status: approved, committed as `1be5964`, `b168a5d`, `b4af0f8` and `3be47f1`, and pushed. The [hosted batch workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45508063067). The evidence below records the implementation-time review. Base `2f69c99` is committed and pushed; its [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45478107145), including CLI on x64 and ARM64. The owner requested several related advances and a grouped commit list. This batch implements the existing replay contract under accepted ADR-0001/0002/0004; it does not introduce a new architecture or dependency.
 
 ## Proposed sequence and affected files
 
@@ -19,7 +19,7 @@ Status: implemented and locally verified, pending owner approval of the complete
 4. **`docs: document ticket replay and recovery evidence`** (depends on 1–3)
    - README, documentation map, roadmap, HTTP/CLI/data-model contracts, recovery/CLI guide, test/CI notes, review 0021 status and this report: executable subset, recovery command, idempotency/history semantics, baseline CI state and actual evidence boundaries.
 
-The patches are supplied separately and as one complete diff, including every new file. Their sequence is checked against an isolated copy of the base tree; final behavior is verified on the combined working tree. They are not claimed to have separate intermediate hosted-CI results. No commit, push, amend or history rewrite of this batch has been performed. Push permission is already granted; exact-patch commit approval is still required by [AGENTS.md](../../../AGENTS.md).
+The patches are supplied separately and as one complete diff, including every new file. Their sequence is checked against an isolated copy of the base tree; final behavior is verified on the combined working tree. They are not claimed to have separate intermediate hosted-CI results. At preparation time the batch was not committed; the owner subsequently approved all four exact patches and their push as recorded above. New code patches still require exact-patch approval under [AGENTS.md](../../../AGENTS.md).
 
 ## Actual verification on 2026-11-24
 

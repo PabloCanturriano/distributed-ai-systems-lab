@@ -4,7 +4,7 @@ This project favors focused changes with evidence that the resulting behavior is
 
 ## Before implementation
 
-The project is in its design phase. Architecture review must precede application scaffolding, dependencies, or runtime configuration. Changes to system boundaries, delivery guarantees, or trust boundaries should include an architecture decision record explaining the context, alternatives, decision, and consequences.
+The architecture baseline has been accepted. Architecture review must precede application scaffolding, dependencies, or runtime configuration outside that accepted scope. Preparing implementation within the baseline does not replace exact-patch review before code commits. Changes to system boundaries, delivery guarantees, or trust boundaries should include an architecture decision record explaining the context, alternatives, decision, and consequences.
 
 ## Keep changes reviewable
 
@@ -46,7 +46,7 @@ Match verification to the risk of the change:
 - AI behavior: distinguish deterministic workflow tests from retrieval and real-model quality evaluations. Record the dataset, configuration, and provider needed to interpret results.
 - Security boundaries: verify authorization, tenant isolation, and input validation where affected.
 
-Run the relevant available checks and state which checks were not run and why. Current commands and boundaries are recorded in the [test strategy](docs/quality/testing.md); a passing foundation check does not establish the unimplemented ticket-workflow guarantees.
+Run the relevant available checks and state which checks were not run and why. Current commands and boundaries are recorded in the [test strategy](docs/quality/testing.md); a passing foundation check does not establish guarantees outside its verified scope. The complete [phase-2 gate](docs/quality/phase2.md) records the implemented ticket workflow and its acceptance evidence.
 
 Never commit credentials, private customer data, or unredacted sensitive logs. Use fictional fixtures and document required environment variables without secret values.
 

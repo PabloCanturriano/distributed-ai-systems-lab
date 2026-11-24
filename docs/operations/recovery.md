@@ -1,6 +1,6 @@
 # Recovery runbooks
 
-Status: the initial worker/relay recovery behavior is committed. Operator replay over API/CLI is locally verified and prepared for batch review below. Quarantine inspection/repair, general host-operation commands and full telemetry remain proposed.
+Status: the initial worker/relay recovery behavior is committed. Operator replay over API/CLI is committed and verified below. Quarantine inspection/repair, general host-operation commands and full telemetry remain proposed.
 
 ## General procedure
 
@@ -49,7 +49,7 @@ Stop new claims and readiness, drain within the configured budget, and let inter
 Evidence includes states before/after, observed assertions, bounded elapsed time, and safe cleanup. A container restart alone is not proof that the intended failure window was exercised.
 
 
-## Replay of a failed ticket (prepared for review)
+## Replay of a failed ticket
 
 After reviewing the failure and correcting its cause, read the current ticket and explicitly replay that failed generation with an operator identity:
 

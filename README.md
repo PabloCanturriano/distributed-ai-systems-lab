@@ -4,11 +4,13 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Foundation phase, in progress.** The repository includes architecture documentation plus TypeScript workspaces, minimal NestJS API/idle worker entry points, and lifecycle tests. API and worker [container images](docs/operations/container-images.md) are implemented for local lifecycle verification. The [database identity foundation](docs/operations/database-foundation.md) and [persistent fictional identities](docs/operations/local-identities.md) have real PostgreSQL integration checks. The [Compose foundation](docs/operations/compose-foundation.md) is implemented. [API PostgreSQL/Redis readiness](docs/operations/api-readiness.md) is implemented. The [Kafka foundation](docs/operations/kafka-foundation.md) is committed. The isolated [client compatibility evaluation](docs/quality/reviews/0010-kafka-client-compatibility.md) and [foundation CI](docs/quality/ci-release.md) are committed, with hosted CI verified for the committed baseline. The [atomic ticket-submission core](docs/quality/reviews/0011-ticket-submission.md) is committed. [Authenticated HTTP submission](docs/quality/reviews/0012-authenticated-ticket-http.md) is committed. [Tenant-scoped ticket status reads](docs/quality/reviews/0013-ticket-reads.md) are committed. The [recoverable outbox protocol](docs/quality/reviews/0014-outbox-publication.md) is committed. The opt-in [real local Kafka relay](docs/quality/reviews/0015-local-kafka-relay.md) is committed. [SQL scheduling admission](docs/quality/reviews/0016-scheduling-admission.md) is committed and pushed. The [native scheduling consumer](docs/quality/reviews/0017-local-scheduling-consumer.md) is committed and pushed. [Execution ownership](docs/quality/reviews/0018-execution-ownership.md) is committed and pushed. [Fenced simulated completions and terminal reads](docs/quality/reviews/0019-simulated-completions.md) are committed and pushed. The [automatic simulated executor](docs/quality/reviews/0020-automatic-executor.md) is committed and pushed, with hosted CI passing on x64 and ARM64. The [ticket CLI](docs/quality/reviews/0021-ticket-cli.md) is committed and pushed with hosted x64/ARM64 evidence. [Operator replay in API and CLI](docs/quality/reviews/0022-ticket-replay-batch.md) is prepared for batch review. Retrieval, tools, full telemetry and real-model inference remain future work. The owner accepted the architecture baseline on 2026-11-16; each new implementation patch remains subject to review before commit.
+**Phase 2 implemented; closure prepared for review.** The local workflow runs from authenticated CLI/API submission through transactional outbox, real Kafka, durable admission and automatic simulated execution to a tenant-scoped result. Idempotency, leases, fencing, operator replay and CI are already committed. This batch closes manual trace correlation and the [complete phase-2 acceptance gate](docs/quality/phase2.md).
 
-The simulated ticket workflow is implemented. Grounded answers and the remaining behaviors below are planned; this is not a release.
+Results remain explicitly simulated. Quarantine repair, full telemetry, retrieval with citations, tools/agent behavior and release are later phases. Each new implementation patch requires review before commit; this is not a production release.
 
-## Local CLI (prepared for review)
+See [phase-2 verification](docs/quality/phase2.md) and [trace inspection](docs/operations/trace-correlation.md) for evidence and limits. Grounded answers remain planned.
+
+## Local CLI
 
 ```sh
 docker compose build cli
@@ -18,7 +20,7 @@ docker compose run --rm -T cli demo --identity summit.requester --json
 
 The result is explicitly simulated. See the [CLI guide](docs/operations/ticket-cli.md) for create/get/wait commands, identities, exit codes and limits. This local workflow is not a release.
 
-## Use case
+## Target use case
 
 A user submits a technical support ticket through an HTTP API or a containerized CLI. A worker retrieves relevant documentation, invokes permitted read-only tools when needed, and produces an answer with references. The user can inspect the ticket's progress and processing outcome.
 
@@ -26,7 +28,7 @@ The same workflow provides a concrete setting for investigating duplicate events
 
 ## Design direction
 
-The proposed design uses two application services: a NestJS API and a worker. The CLI consumes the API rather than duplicating business logic.
+The accepted design uses two application services: a NestJS API and a worker. The CLI consumes the API rather than duplicating business logic.
 
 | Technology | Intended responsibility |
 | --- | --- |
@@ -38,7 +40,7 @@ The proposed design uses two application services: a NestJS API and a worker. Th
 | Docker Compose | Reproducible local environment |
 | OpenTelemetry | Traces and metrics across HTTP, events, and AI operations |
 
-PostgreSQL is the source of truth. Redis must not be required for business correctness. The proposed boundaries, contracts, and tradeoffs are recorded in the [documentation map](docs/README.md) and ADRs; the baseline was accepted on 2026-11-16, with implementation evidence still required.
+PostgreSQL is the source of truth. Redis must not be required for business correctness. The boundaries, contracts, and tradeoffs are recorded in the [documentation map](docs/README.md) and ADRs; the baseline was accepted on 2026-11-16, with implementation evidence still required.
 
 ## Behaviors to demonstrate
 
@@ -52,15 +54,15 @@ PostgreSQL is the source of truth. Redis must not be required for business corre
 | Agent boundaries | Tool arguments, tenant permissions, step counts, and execution budgets are enforced. |
 | Observability | A reviewer can follow a ticket from its HTTP request through event processing and AI operations. |
 
-Event delivery will be at least once. This does not imply exactly-once execution of external model or tool calls; their failure windows and recovery behavior must be documented.
+Event delivery is at least once. This does not imply exactly-once execution of external model or tool calls; their failure windows and recovery behavior must be documented.
 
-## Planned reviewer experience
+## Reviewer experience and remaining work
 
-The target is a single Docker Compose startup command, fictional seed data, and a CLI-guided demonstration requiring no external credentials. Scenarios will report their expected outcome, observed result, and success or failure.
+The local journey above uses fictional seed data and a CLI demonstration without an external model key. Default-profile full-workflow startup and general scenario commands remain future work.
 
-A deterministic simulated AI provider will support repeatable workflow tests. An optional real-model integration will have separate quality evaluations; simulated results will not be presented as evidence of model quality.
+A deterministic simulated provider currently supports repeatable workflow tests. An optional real-model integration will have separate quality evaluations; simulated results will not be presented as evidence of model quality.
 
-The [Compose foundation commands](docs/operations/compose-foundation.md) verify initialization and process lifecycle. Complete ticket-demo commands and measured prerequisites remain future work.
+The [Compose foundation commands](docs/operations/compose-foundation.md) verify initialization and process lifecycle. The CLI commands above demonstrate the complete simulated workflow; release-level prerequisites and measurements remain future work.
 
 ## Delivery sequence
 
@@ -79,7 +81,7 @@ The initial release focuses on local execution and backend behavior. It excludes
 
 Start with the [architecture overview](docs/architecture/overview.md), [HTTP/event contracts](docs/architecture/contracts.md), and [execution decision record](docs/adr/0001-durable-ai-execution.md). The [documentation map](docs/README.md) links the data model, security design, CLI, AI limitations, tests, and runbooks.
 
-The [roadmap](docs/roadmap.md) defines delivery phases and acceptance gates. The [review checklist](docs/architecture/review.md) makes the implementation approval boundary explicit. Submission-level checks now have local evidence; the complete ticket-processing workflow remains unimplemented.
+The [roadmap](docs/roadmap.md) defines delivery phases and acceptance gates. The [review checklist](docs/architecture/review.md) makes the implementation approval boundary explicit. The [phase-2 gate](docs/quality/phase2.md) now verifies the complete simulated workflow and its required failure/concurrency boundaries; the closure patch is pending owner review.
 
 ## Current limitations
 

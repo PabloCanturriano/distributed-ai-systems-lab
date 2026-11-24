@@ -1,12 +1,12 @@
 # CLI contract and reviewer journey
 
-Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are committed; see [review 0021](../quality/reviews/0021-ticket-cli.md). `ticket replay` with explicit generation/key and operator authorization is prepared for batch review in [review 0022](../quality/reviews/0022-ticket-replay-batch.md). Scenario/evaluation commands remain proposed. No released environment is claimed.
+Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are committed; see [review 0021](../quality/reviews/0021-ticket-cli.md). `ticket replay` with explicit generation/key and operator authorization is committed in [review 0022](../quality/reviews/0022-ticket-replay-batch.md). Scenario/evaluation commands remain proposed. No released environment is claimed.
 
 ## First-run journey
 
 The implemented startup uses both `messaging` and `execution` profiles, followed by an explicitly built, on-demand CLI. See the [verified local commands](../operations/ticket-cli.md). The original target of a default-profile full workflow remains future work. The guide builds the CLI, starts infrastructure with migrations/seeds and then demonstrates a ticket from submission to its simulated result. A reviewer needs Git and Docker Compose, not a local Node.js installation or an AI API key.
 
-The CLI prints the selected fictional tenant/role alias, simulated or real mode, ticket ID, progress, answer/abstention, citations, tool names, and trace lookup information. It never displays bearer credentials, prompts, or raw tool payloads. It distinguishes scenario failure from unavailable infrastructure and polling deadline expiry.
+The CLI prints the selected fictional tenant/role alias, simulated or real mode, ticket ID, progress, answer/abstention, citations, tool names, and trace lookup hints as documented in the [phase-2 trace guide](../operations/trace-correlation.md). No viewer URL is generated. It never displays bearer credentials, prompts, or raw tool payloads. It distinguishes scenario failure from unavailable infrastructure and polling deadline expiry.
 
 ## Command contract (partially implemented)
 

@@ -1,10 +1,10 @@
 # Observability design
 
-Status: planned instrumentation and local inspection; no traces, dashboards, or metric results exist yet.
+Status: [phase-2 manual trace correlation](trace-correlation.md) is implemented locally and prepared for owner review. The Collector/Jaeger/Prometheus topology, metrics, dashboards, export-loss instrumentation and remaining full OBS acceptance below are still phase-3 work.
 
 ## Signals and topology
 
-API and worker use OpenTelemetry with an internal Collector. Traces go to Jaeger; metrics are available to Prometheus. Structured application logs go to stdout with safe correlation metadata; no separate log-storage platform is required initially. The [Collector](https://opentelemetry.io/docs/collector/) separates application instrumentation from backend export configuration.
+The phase-3 topology will connect API and worker OpenTelemetry to an internal Collector, export traces to Jaeger and expose metrics to Prometheus. The current phase-2 implementation projects manual SDK spans into bounded local logs. Structured application logs go to stdout with safe correlation metadata; no separate log-storage platform is required initially. The [Collector](https://opentelemetry.io/docs/collector/) separates application instrumentation from backend export configuration.
 
 Use service names `lab-api` and `lab-worker`, plus worker role, revision, and provider mode as bounded resource attributes. Instrument HTTP acceptance, submission transaction, outbox publication, consumer admission, job claim, retrieval, model call, tool call, and terminal persistence. Include safe error classification and elapsed time, not payloads.
 

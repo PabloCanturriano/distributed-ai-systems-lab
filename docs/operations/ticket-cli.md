@@ -1,6 +1,6 @@
 # Local ticket CLI (prepared for review)
 
-The on-demand CLI uses only the public HTTP API. Its initial TypeScript implementation is committed and verified on hosted x64/ARM64; replay support is locally verified and prepared for batch review, not a release. The default endpoint is fixed to `http://api:3000` on the trusted Compose backend. Remote endpoint selection, scenarios and evaluation commands are not implemented. See [replay recovery](recovery.md#replay-of-a-failed-ticket-prepared-for-review) for the new operator command.
+The on-demand CLI uses only the public HTTP API. Its initial TypeScript implementation is committed and verified on hosted x64/ARM64; operator replay is also committed; phase-2 trace hints are prepared for owner review, not a release. The default endpoint is fixed to `http://api:3000` on the trusted Compose backend. Remote endpoint selection, scenarios and evaluation commands are not implemented. See [replay recovery](recovery.md#replay-of-a-failed-ticket) for the new operator command.
 
 ## Docker-only journey
 
@@ -44,7 +44,7 @@ The quoted message is ordinary fictional input, not a credential. Credentials ar
 
 The deadline defaults to 60 seconds and accepts integer values from 1 through 300. Each HTTP attempt is limited to five seconds or the remaining overall time. The client retries transient transport failures (including a cut response body) and 503 at most twice per HTTP operation. It retains the same key and normalized payload, honors supported Retry-After delays up to five seconds and declines a retry that would need a longer server-requested delay. No automatic retry follows 409, 429, authentication failures or redirects. Polling uses a one-second interval. A client timeout or interruption does not cancel a durable ticket.
 
-Generated or supplied submission keys are retained in receipt/error output so a deliberate retry can use the same key. The server remains authoritative for idempotency, limits and tenant visibility. A malformed acceptance URL is rejected; the client constructs its fixed local GET path from the validated ticket ID rather than following a server-selected endpoint. Request IDs are safe correlation hints; distributed tracing is not implemented by this slice.
+Generated or supplied submission keys are retained in receipt/error output so a deliberate retry can use the same key. The server remains authoritative for idempotency, limits and tenant visibility. A malformed acceptance URL is rejected; the client constructs its fixed local GET path from the validated ticket ID rather than following a server-selected endpoint. The phase-2 closure adds `traceId` and `acceptedTraceId` hints from validated response contexts and forwards context only to subsequent requests at the fixed local API. See [trace inspection](trace-correlation.md) for their meaning and idempotent-retry/log-retention limits.
 
 ## Boundaries and verification
 

@@ -139,11 +139,16 @@ Model retention is a local-demo simplification. Production retention, privacy de
 - DATA-09: repeated failure-finalization and relay recovery do not duplicate logical terminal effects.
 - DATA-10: after ambiguous commit acknowledgement, retry observes committed state without fabricating another claim or effect.
 
-These are future integration tests using real PostgreSQL. Exact column types, migrations, ownership predicates, bounded result sizes, and deadlock handling must be reviewed with the implementation patch. Authentication provisioning and threat analysis are specified in the [security proposal](security.md); application scaffolding remains gated.
+The [phase-2 gate](../quality/phase2.md) verifies DATA-01 through DATA-04 using real PostgreSQL. Remaining families require their own recorded evidence and are not implied by phase-2 closure. Exact column types, migrations, ownership predicates, bounded result sizes, and deadlock handling must be reviewed with the implementation patch. Authentication provisioning and threat analysis are specified in the [security proposal](security.md); application scaffolding remains gated.
 
 
-## Prepared replay persistence boundary
+## Replay persistence boundary
 
 [Review 0022](../quality/reviews/0022-ticket-replay-batch.md) adds the ninth migration and atomic replay operation. A new failed-to-queued generation is separate from the immutable old execution/job/attempt/failure history. The transaction takes the tenant-scoped ticket lock before receipt or lifecycle checks, then inserts a new execution, scheduling outbox, scoped receipt and audit record and advances the current-generation pointer. Every lifecycle writer already takes this same ticket lock first, so the API needs no UPDATE permission on old execution rows.
 
 `audit_records` contains only identity/action/request metadata, with tenant-consistent principal and old/new execution FKs, consecutive generation checks and one replay audit per generation. API grants permit audit INSERT and only `tickets.current_generation/updated_at` UPDATE; audit UPDATE/DELETE, ticket-content changes and worker-role escalation are not granted. The API role remains a trusted module identity; this is not RLS or database-enforced forward-only lifecycle policy for a compromised API.
+
+
+## Optional phase-2 trace origins
+
+The tenth migration adds nullable `trace_parent` metadata to outbox events and execution jobs, with canonical version-00/nonzero-ID constraints and insert-only runtime grants. Context is validated or dropped before persistence. Outbox payload, digest, event identity and scoped request hash remain unchanged; duplicate delivery/requests retain the original metadata. Existing rows stay null and readable after upgrade. The durable origins permit worker-process restarts without losing the normal trace chain; missing metadata never grants access or blocks valid scheduling. See [trace correlation](../operations/trace-correlation.md).

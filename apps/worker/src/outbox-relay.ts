@@ -1,10 +1,21 @@
+import {
+  noTelemetry,
+  type Telemetry,
+  type Outcome as TraceOutcome,
+} from '@lab/telemetry';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { OutboxClaim, OutboxPublications } from './outbox-publications';
 
 export interface OutboxPublisher {
   // Resolve only after broker acknowledgement. SDK-specific types stay in the adapter.
   publish(
-    message: { topic: string; key: string; value: string; eventId: string },
+    message: {
+      topic: string;
+      key: string;
+      value: string;
+      eventId: string;
+      traceParent?: string;
+    },
     signal: AbortSignal,
   ): Promise<void>;
 }
@@ -15,10 +26,12 @@ export class OutboxRelay {
       'claim' | 'isCurrent' | 'acknowledge' | 'retry'
     >,
     private readonly publisher: OutboxPublisher,
+    private readonly telemetry: Telemetry = noTelemetry,
   ) {}
   private async publish(
     claim: OutboxClaim,
     signal?: AbortSignal,
+    traceParent?: string,
   ): Promise<void> {
     if (signal?.aborted) throw new Error('Publication interrupted');
     const controller = new AbortController();
@@ -45,6 +58,7 @@ export class OutboxRelay {
             key: claim.ticketId,
             value: claim.payload,
             eventId: claim.eventId,
+            ...(traceParent ? { traceParent } : {}),
           },
           controller.signal,
         ),
@@ -86,21 +100,34 @@ export class OutboxRelay {
         else result.stale++;
         continue;
       }
+      const span = this.telemetry.start('outbox.publish', claim.traceParent);
+      let outcome: TraceOutcome = 'failed';
       try {
-        await this.publish(claim, signal);
-      } catch {
-        if (
-          await this.store.retry(claim.eventId, claim.token, 'PUBLISH_FAILED')
-        )
-          result.retryable++;
-        else result.stale++;
-        continue;
+        try {
+          await this.publish(claim, signal, span.traceParent);
+        } catch {
+          if (
+            await this.store.retry(claim.eventId, claim.token, 'PUBLISH_FAILED')
+          ) {
+            result.retryable++;
+            outcome = 'retryable';
+          } else {
+            result.stale++;
+            outcome = 'stale';
+          }
+          continue;
+        }
+        // Do not turn an uncertain acknowledgement into a publication retry.
+        if (await this.store.acknowledge(claim.eventId, claim.token)) {
+          result.published++;
+          outcome = 'completed';
+        } else {
+          result.stale++;
+          outcome = 'stale';
+        }
+      } finally {
+        span.end(outcome, { ticketId: claim.ticketId, eventId: claim.eventId });
       }
-      // Keep acknowledgement failures outside the publish-error handler: a lost
-      // commit reply must not turn a possibly published row back into retry state.
-      if (await this.store.acknowledge(claim.eventId, claim.token))
-        result.published++;
-      else result.stale++;
     }
     result.deferred =
       result.claimed - result.published - result.retryable - result.stale;

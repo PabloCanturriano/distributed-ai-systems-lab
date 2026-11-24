@@ -1,3 +1,10 @@
+import {
+  noTelemetry,
+  validTraceParent,
+  type Telemetry,
+  type Outcome as TraceOutcome,
+} from '@lab/telemetry';
+import { parseSchedulingEvent } from './scheduling-event';
 import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
@@ -30,6 +37,7 @@ export class KafkaSchedulingConsumer {
     private readonly admissions: Pick<SchedulingAdmissions, 'admit'>,
     private readonly report: (event: ConsumerEvent) => void = () => {},
     private readonly onClosing: () => void = () => {},
+    private readonly telemetry: Telemetry = noTelemetry,
   ) {
     this.done = new Promise((resolve) => {
       this.finish = resolve;
@@ -96,69 +104,93 @@ export class KafkaSchedulingConsumer {
       this.stop(true);
       throw new Error('Invalid scheduling source');
     }
+    const span = this.telemetry.start(
+      'consumer.admit',
+      validTraceParent(message.headers?.traceparent),
+    );
+    let outcome: TraceOutcome = 'interrupted';
     const record = {
       topic,
       partition,
       offset: message.offset,
       key: message.key,
       value: message.value,
+      ...(span.traceParent ? { traceParent: span.traceParent } : {}),
     };
-    for (;;) {
-      if (this.stopping.signal.aborted)
-        throw new Error('Scheduling interrupted');
-      try {
-        const result = await this.admissions.admit(record);
-        if (this.stopping.signal.aborted)
-          throw new Error('Scheduling interrupted');
-        this.report(
-          result.disposition === 'quarantined'
-            ? 'consumer_quarantined'
-            : result.disposition === 'scheduled'
-              ? 'consumer_admitted'
-              : 'consumer_duplicate',
-        );
-        break;
-      } catch (error) {
-        if (this.stopping.signal.aborted)
-          throw new Error('Scheduling interrupted');
-        if (
-          error instanceof SchedulingAdmissionError &&
-          error.code === 'INVALID_RECORD'
-        ) {
-          this.report('consumer_invalid_source');
-          this.stop(true);
-          throw new Error('Invalid scheduling source');
-        }
-        // Keep this callback pending. A later record must not skip failed SQL.
-        this.report('consumer_dependency_unavailable');
-        await delay(500, undefined, { signal: this.stopping.signal }).catch(
-          () => {},
-        );
-      }
-    }
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const parsed = parseSchedulingEvent(record);
     try {
-      await Promise.race([
-        this.client.commitOffsets([
-          {
-            topic,
-            partition,
-            offset: (BigInt(message.offset) + 1n).toString(),
-          },
-        ]),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('Commit deadline')), 5000);
-        }),
-      ]);
-      this.report('consumer_committed');
-    } catch {
-      // Never move on after ambiguous commit acceptance. Disconnect outside the
-      // callback; the durable inbox/job makes a subsequent redelivery safe.
-      this.report('consumer_offset_failed');
-      this.stop(true);
-      throw new Error('Scheduling commit unavailable');
+      for (;;) {
+        if (this.stopping.signal.aborted)
+          throw new Error('Scheduling interrupted');
+        try {
+          const result = await this.admissions.admit(record);
+          outcome = result.disposition;
+          if (this.stopping.signal.aborted)
+            throw new Error('Scheduling interrupted');
+          this.report(
+            result.disposition === 'quarantined'
+              ? 'consumer_quarantined'
+              : result.disposition === 'scheduled'
+                ? 'consumer_admitted'
+                : 'consumer_duplicate',
+          );
+          break;
+        } catch (error) {
+          if (this.stopping.signal.aborted)
+            throw new Error('Scheduling interrupted');
+          if (
+            error instanceof SchedulingAdmissionError &&
+            error.code === 'INVALID_RECORD'
+          ) {
+            this.report('consumer_invalid_source');
+            this.stop(true);
+            throw new Error('Invalid scheduling source');
+          }
+          // Keep this callback pending. A later record must not skip failed SQL.
+          this.report('consumer_dependency_unavailable');
+          await delay(500, undefined, { signal: this.stopping.signal }).catch(
+            () => {},
+          );
+        }
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          this.client.commitOffsets([
+            {
+              topic,
+              partition,
+              offset: (BigInt(message.offset) + 1n).toString(),
+            },
+          ]),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('Commit deadline')),
+              5000,
+            );
+          }),
+        ]);
+        this.report('consumer_committed');
+      } catch {
+        // Never move on after ambiguous commit acceptance. Disconnect outside the
+        // callback; the durable inbox/job makes a subsequent redelivery safe.
+        this.report('consumer_offset_failed');
+        this.stop(true);
+        throw new Error('Scheduling commit unavailable');
+      } finally {
+        clearTimeout(timer);
+      }
     } finally {
-      clearTimeout(timer);
+      span.end(
+        outcome,
+        typeof parsed === 'string'
+          ? {}
+          : {
+              ticketId: parsed.ticketId,
+              eventId: parsed.eventId,
+              generation: parsed.generation,
+            },
+      );
     }
   }
 

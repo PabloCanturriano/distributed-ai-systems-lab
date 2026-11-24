@@ -129,3 +129,25 @@ test('terminal notification events use the separate failure topic', async () => 
   ).toMatchObject({ published: 1 });
   expect(publish.mock.calls[0][0].topic).toBe('tickets.execution-failed.v1');
 });
+test('publication propagates a child context without changing stored bytes or failing on export', async () => {
+  const { createTelemetry } = require('../packages/telemetry/dist');
+  const spans = [],
+    telemetry = createTelemetry('lab-worker', 'relay', (r) => {
+      spans.push(r);
+      throw new Error('private-export-fixture');
+    });
+  const event = {
+      ...claim(),
+      traceParent: '00-11111111111111111111111111111111-2222222222222222-01',
+    },
+    store = source([event]),
+    publisher = { publish: jest.fn(async () => {}) };
+  expect(
+    await new OutboxRelay(store, publisher, telemetry).publishBatch(),
+  ).toMatchObject({ published: 1 });
+  expect(publisher.publish.mock.calls[0][0].value).toBe(event.payload);
+  expect(publisher.publish.mock.calls[0][0].traceParent).toMatch(
+    /^00-11111111111111111111111111111111-[a-f0-9]{16}-01$/,
+  );
+  expect(spans[0].outcome).toBe('completed');
+});

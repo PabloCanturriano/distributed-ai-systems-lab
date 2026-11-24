@@ -1,3 +1,4 @@
+import { localTelemetry } from '@lab/telemetry';
 import { loadRelayConfiguration } from '@lab/configuration';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -68,8 +69,13 @@ async function main(): Promise<void> {
     application_name: 'lab-outbox-relay',
   });
   pool.on('error', () => report('relay_database_unavailable'));
+  const telemetry = localTelemetry('lab-worker', 'relay');
   const publisher = new KafkaPublisher(config.kafka);
-  const relay = new OutboxRelay(new OutboxPublications(pool), publisher);
+  const relay = new OutboxRelay(
+    new OutboxPublications(pool),
+    publisher,
+    telemetry,
+  );
   report('relay_started');
   try {
     while (!controller.signal.aborted) {
@@ -87,7 +93,11 @@ async function main(): Promise<void> {
         }).catch(() => {});
     }
   } finally {
-    await Promise.allSettled([publisher.close(), pool.end()]);
+    await Promise.allSettled([
+      publisher.close(),
+      pool.end(),
+      telemetry.shutdown(),
+    ]);
   }
 }
 void main()

@@ -65,7 +65,15 @@ export class KafkaPublisher implements OutboxPublisher {
         throw new Error('Publisher unavailable');
       await slot.producer.send({
         topic: message.topic,
-        messages: [{ key: message.key, value: message.value }],
+        messages: [
+          {
+            key: message.key,
+            value: message.value,
+            ...(message.traceParent
+              ? { headers: { traceparent: message.traceParent } }
+              : {}),
+          },
+        ],
       });
       if (signal.aborted || this.closed)
         throw new Error('Publisher unavailable');

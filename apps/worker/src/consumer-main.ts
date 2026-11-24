@@ -1,3 +1,4 @@
+import { localTelemetry } from '@lab/telemetry';
 import { loadConsumerConfiguration } from '@lab/configuration';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
     application_name: 'lab-scheduling-consumer',
   });
   pool.on('error', () => report('consumer_database_unavailable'));
+  const telemetry = localTelemetry('lab-worker', 'consumer');
   let consumer: KafkaSchedulingConsumer | undefined;
   try {
     consumer = new KafkaSchedulingConsumer(
@@ -71,13 +73,18 @@ async function main(): Promise<void> {
       new SchedulingAdmissions(pool),
       report,
       stop,
+      telemetry,
     );
     report('consumer_started');
     await consumer.run(controller.signal);
   } finally {
     // Fatal startup/commit errors need the same hard teardown bound as signals.
     stop();
-    await Promise.allSettled([consumer?.close(), pool.end()]);
+    await Promise.allSettled([
+      consumer?.close(),
+      pool.end(),
+      telemetry.shutdown(),
+    ]);
   }
 }
 void main()

@@ -282,3 +282,31 @@ test('the polling runtime never has more than two active provider attempts', asy
   await running;
   expect(store.complete).not.toHaveBeenCalled();
 });
+test('a detached executor child uses the durable origin even when its sink fails', async () => {
+  const { createTelemetry } = require('../packages/telemetry/dist');
+  const spans = [];
+  const telemetry = createTelemetry('lab-worker', 'executor', (value) => {
+    spans.push(value);
+    throw new Error('private-export-fixture');
+  });
+  const store = source();
+  store.claim.mockResolvedValue({
+    ...claim,
+    traceParent: '00-11111111111111111111111111111111-2222222222222222-01',
+  });
+  expect(
+    await new JobExecutor(
+      store,
+      { execute: async () => result },
+      () => {},
+      telemetry,
+    ).runOnce(new AbortController().signal),
+  ).toBe(true);
+  expect(store.complete).toHaveBeenCalled();
+  expect(spans[0]).toMatchObject({
+    stage: 'execution.run',
+    traceId: '11111111111111111111111111111111',
+    parentSpanId: '2222222222222222',
+    outcome: 'completed',
+  });
+});

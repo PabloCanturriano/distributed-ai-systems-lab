@@ -1,3 +1,4 @@
+import { localTelemetry } from '@lab/telemetry';
 import { loadExecutorConfiguration } from '@lab/configuration';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -63,16 +64,18 @@ async function main() {
     application_name: 'lab-job-executor',
   });
   pool.on('error', () => report('executor_database_unavailable'));
+  const telemetry = localTelemetry('lab-worker', 'executor');
   try {
     report('executor_started');
     await new JobExecutor(
       new ExecutionOwnership(pool),
       new SimulatedAbstentionProvider(),
       report,
+      telemetry,
     ).run(controller.signal);
   } finally {
     stop();
-    await pool.end();
+    await Promise.allSettled([pool.end(), telemetry.shutdown()]);
   }
 }
 void main()

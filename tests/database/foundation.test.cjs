@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(8);
+  expect(applied).toBe(9);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -91,6 +91,7 @@ test('clean install applies the identity migration as the non-superuser owner', 
     "SELECT tablename FROM pg_tables WHERE schemaname = 'lab' ORDER BY tablename",
   );
   expect(tables.rows.map((row) => row.tablename)).toEqual([
+    'audit_records',
     'auth_credentials',
     'consumer_inbox',
     'event_quarantine',
@@ -126,7 +127,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(8);
+  ).toBe(9);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -279,7 +280,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(8);
+    ).toBe(9);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -690,7 +691,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3, 4, 5, 6, 7])(
+test.each([2, 3, 4, 5, 6, 7, 8])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -732,6 +733,11 @@ test.each([2, 3, 4, 5, 6, 7])(
         await copyFile(
           'database/migrations/1795305600000_execution-ownership.cjs',
           join(directory, '1795305600000_execution-ownership.cjs'),
+        );
+      if (baselineCount >= 8)
+        await copyFile(
+          'database/migrations/1795392000000_execution-completion.cjs',
+          join(directory, '1795392000000_execution-completion.cjs'),
         );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
@@ -811,7 +817,7 @@ test.each([2, 3, 4, 5, 6, 7])(
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(8 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(9 - baselineCount);
       if (pendingJob) {
         const job = (
           await upgrade.query('SELECT * FROM lab.execution_jobs WHERE id=$1', [

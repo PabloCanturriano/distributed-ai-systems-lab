@@ -605,3 +605,94 @@ test('replay rejects duplicate authorization and idempotency headers before muta
     },
   );
 });
+test('HTTP tracing propagates safe context into persistence without changing the receipt', async () => {
+  const { createTelemetry } = require('../packages/telemetry/dist');
+  const spans = [],
+    telemetry = createTelemetry('lab-api', 'api', (r) => {
+      spans.push(r);
+      return true;
+    });
+  const id = randomUUID();
+  let input;
+  const service = {
+    checkIngress: async () => {},
+    authenticate: async () => ({
+      tenantId: randomUUID(),
+      principalId: randomUUID(),
+      role: 'requester',
+    }),
+    checkSubmissionLimit: async () => {},
+    submit: async (value) => {
+      input = value;
+      return { ticketId: id, generation: 1, statusUrl: `/v1/tickets/${id}` };
+    },
+  };
+  const app = await createApi(undefined, service, telemetry);
+  try {
+    await app.listen(0, '127.0.0.1');
+    const parent = '00-11111111111111111111111111111111-2222222222222222-01';
+    const r = await fetch(`${await app.getUrl()}/v1/tickets`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'trace-key',
+        traceparent: parent,
+        baggage: 'private-secret-fixture',
+      },
+      body: '{"message":"private-question-fixture"}',
+    });
+    expect(r.status).toBe(202);
+    expect(await r.json()).toEqual({
+      ticketId: id,
+      generation: 1,
+      statusUrl: `/v1/tickets/${id}`,
+    });
+    expect(r.headers.get('x-trace-id')).toBe(
+      '11111111111111111111111111111111',
+    );
+    expect(input.traceParent).toBe(r.headers.get('traceparent'));
+    expect(spans[0]).toMatchObject({
+      stage: 'http.submit',
+      outcome: 'accepted',
+      ticketId: id,
+      parentSpanId: '2222222222222222',
+    });
+    expect(JSON.stringify(spans)).not.toContain('private');
+  } finally {
+    await app.close();
+  }
+});
+test('an exporter exception cannot turn a successful HTTP acceptance into an error', async () => {
+  const { createTelemetry } = require('../packages/telemetry/dist');
+  const telemetry = createTelemetry('lab-api', 'api', () => {
+    throw new Error('private-exporter-fixture');
+  });
+  const id = randomUUID(),
+    service = {
+      checkIngress: async () => {},
+      authenticate: async () => ({
+        tenantId: randomUUID(),
+        principalId: randomUUID(),
+        role: 'requester',
+      }),
+      checkSubmissionLimit: async () => {},
+      submit: async () => ({
+        ticketId: id,
+        generation: 1,
+        statusUrl: `/v1/tickets/${id}`,
+      }),
+    };
+  const app = await createApi(undefined, service, telemetry);
+  try {
+    await app.listen(0, '127.0.0.1');
+    const r = await fetch(`${await app.getUrl()}/v1/tickets`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"message":"fictional"}',
+    });
+    expect(r.status).toBe(202);
+    expect((await r.json()).ticketId).toBe(id);
+  } finally {
+    await app.close();
+  }
+});

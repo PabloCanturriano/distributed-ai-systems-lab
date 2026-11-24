@@ -22,6 +22,8 @@ interface Output {
   identity?: string;
   key?: string;
   requestId?: string;
+  traceId?: string;
+  acceptedTraceId?: string;
   ticket?: Record<string, unknown>;
   error?: { code: string; message: string };
   help?: string;
@@ -351,6 +353,7 @@ export async function runCli(
         throw new CliError('CREDENTIAL_UNAVAILABLE', 3);
       }
       remaining();
+      let followTraceParent: string | undefined;
       async function request(id?: string, replay = false): Promise<unknown> {
         const mutation = id === undefined || replay;
         for (let attempt = 0; ; attempt++) {
@@ -364,6 +367,9 @@ export async function runCli(
                 redirect: 'manual',
                 headers: {
                   authorization: `Bearer ${credential.lookupId}.${credential.secret}`,
+                  ...(followTraceParent
+                    ? { traceparent: followTraceParent }
+                    : {}),
                   ...(mutation
                     ? {
                         'content-type': 'application/json',
@@ -391,6 +397,16 @@ export async function runCli(
             continue;
           }
           remaining();
+          const parent = response.headers.get('traceparent');
+          if (
+            parent &&
+            /^00-[a-f0-9]{32}-[a-f0-9]{16}-(00|01)$/.test(parent) &&
+            parent.slice(3, 35) !== '0'.repeat(32) &&
+            parent.slice(36, 52) !== '0'.repeat(16)
+          ) {
+            followTraceParent ??= parent;
+            output.traceId = parent.slice(3, 35);
+          }
           if (response.status === 503 && attempt < 2) {
             await response.body?.cancel();
             const header = response.headers.get('retry-after');
@@ -475,6 +491,7 @@ export async function runCli(
             ? receipt(await request(p.id, true), expectedGeneration! + 1)
             : receipt(await request());
         output.outcome = 'accepted';
+        if (output.traceId) output.acceptedTraceId = output.traceId;
         id = output.ticket.ticketId as string;
       }
       if (p.command !== 'ticket create' && p.command !== 'ticket replay') {

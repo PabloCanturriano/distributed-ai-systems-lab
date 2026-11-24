@@ -1,3 +1,4 @@
+import { localTelemetry } from '@lab/telemetry';
 import { loadApiConfiguration } from '@lab/configuration';
 import { createApi } from './app';
 import { ApiDependencies } from './dependencies';
@@ -7,12 +8,16 @@ async function main(): Promise<void> {
   const dependencies = configuration.dependencies
     ? await ApiDependencies.create(configuration.dependencies)
     : undefined;
-  const app = await createApi(dependencies, dependencies?.tickets).catch(
-    async (error: unknown) => {
-      await dependencies?.onApplicationShutdown();
-      throw error;
-    },
-  );
+  const telemetry = localTelemetry('lab-api', 'api');
+  const app = await createApi(
+    dependencies,
+    dependencies?.tickets,
+    telemetry,
+  ).catch(async (error: unknown) => {
+    await dependencies?.onApplicationShutdown();
+    await telemetry.shutdown();
+    throw error;
+  });
   app.enableShutdownHooks();
   try {
     await app.listen(configuration.port, configuration.host);

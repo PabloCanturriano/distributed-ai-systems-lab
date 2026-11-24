@@ -1,7 +1,12 @@
+import { noTelemetry, type Telemetry } from '@lab/telemetry';
 import 'reflect-metadata';
 import { Controller, Get, HttpException, Inject, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { TicketController, TICKET_SERVICE } from './ticket-http';
+import {
+  TicketController,
+  TICKET_SERVICE,
+  TICKET_TELEMETRY,
+} from './ticket-http';
 import type { TicketService } from './ticket-access';
 
 export interface ReadinessProbe {
@@ -38,6 +43,7 @@ class ApiModule {}
 export async function createApi(
   dependencies: ReadinessProbe = { isReady: async () => false },
   tickets?: TicketService,
+  telemetry: Telemetry = noTelemetry,
 ) {
   const app = await NestFactory.create(
     {
@@ -45,6 +51,11 @@ export async function createApi(
       providers: [
         { provide: READINESS, useValue: dependencies },
         { provide: TICKET_SERVICE, useValue: tickets ?? null },
+        { provide: TICKET_TELEMETRY, useValue: telemetry },
+        {
+          provide: 'telemetry-lifecycle',
+          useValue: { onApplicationShutdown: () => telemetry.shutdown() },
+        },
       ],
     },
     { logger: false, bodyParser: false },

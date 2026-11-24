@@ -1,3 +1,4 @@
+import { type Telemetry, type Stage } from '@lab/telemetry';
 import { Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -7,6 +8,7 @@ import { TicketReadError } from './ticket-read';
 import { TicketReplayError } from './ticket-replay';
 
 export const TICKET_SERVICE = Symbol('ticket-service');
+export const TICKET_TELEMETRY = Symbol('ticket-telemetry');
 const messages = {
   INVALID_REQUEST: [400, 'Request is invalid.'],
   UNAUTHENTICATED: [401, 'Authentication is required.'],
@@ -95,6 +97,7 @@ async function jsonBody(request: IncomingMessage): Promise<unknown> {
 export class TicketController {
   constructor(
     @Inject(TICKET_SERVICE) private readonly service: TicketService | null,
+    @Inject(TICKET_TELEMETRY) private readonly telemetry: Telemetry,
   ) {}
   @Post()
   async submit(
@@ -102,6 +105,7 @@ export class TicketController {
     @Res() response: ServerResponse,
   ): Promise<void> {
     const requestId = this.headers(response);
+    const span = this.startTrace('http.submit', request, response);
     try {
       const { service, identity } = await this.identify(request);
       if (!['requester', 'operator'].includes(identity.role))
@@ -120,13 +124,20 @@ export class TicketController {
         principalId: identity.principalId,
         requestId,
         key: request.headers['idempotency-key'],
+        ...(span.traceParent ? { traceParent: span.traceParent } : {}),
         body,
       });
       response.statusCode = 202;
       response.setHeader('Location', receipt.statusUrl);
       response.end(JSON.stringify(receipt));
+      span.end('accepted', {
+        requestId,
+        ticketId: receipt.ticketId,
+        generation: receipt.generation,
+      });
     } catch (error) {
       this.failure(response, error, requestId);
+      span.end('failed', { requestId });
     }
   }
   @Post(':ticketId/replays')
@@ -136,6 +147,7 @@ export class TicketController {
     @Param('ticketId') ticketId: string,
   ): Promise<void> {
     const requestId = this.headers(response);
+    const span = this.startTrace('http.replay', request, response);
     try {
       const { service, identity } = await this.identify(request);
       if (identity.role !== 'operator') throw new RequestError('FORBIDDEN');
@@ -155,13 +167,20 @@ export class TicketController {
         ticketId,
         requestId,
         key: request.headers['idempotency-key'],
+        ...(span.traceParent ? { traceParent: span.traceParent } : {}),
         body,
       });
       response.statusCode = 202;
       response.setHeader('Location', receipt.statusUrl);
       response.end(JSON.stringify(receipt));
+      span.end('accepted', {
+        requestId,
+        ticketId: receipt.ticketId,
+        generation: receipt.generation,
+      });
     } catch (error) {
       this.failure(response, error, requestId);
+      span.end('failed', { requestId });
     }
   }
   @Get(':ticketId')
@@ -171,15 +190,32 @@ export class TicketController {
     @Param('ticketId') ticketId: string,
   ): Promise<void> {
     const requestId = this.headers(response);
+    const span = this.startTrace('http.read', request, response);
     try {
       const { service, identity } = await this.identify(request);
       await service.checkReadLimit(identity);
       const ticket = await service.getTicket(identity, ticketId);
       response.statusCode = 200;
       response.end(JSON.stringify(ticket));
+      span.end('observed', {
+        requestId,
+        ticketId: ticket.ticketId,
+        generation: ticket.generation,
+      });
     } catch (error) {
       this.failure(response, error, requestId);
+      span.end('failed', { requestId });
     }
+  }
+  private startTrace(
+    stage: Stage,
+    request: IncomingMessage,
+    response: ServerResponse,
+  ) {
+    const span = this.telemetry.start(stage, request.headers.traceparent);
+    if (span.traceId) response.setHeader('X-Trace-Id', span.traceId);
+    if (span.traceParent) response.setHeader('traceparent', span.traceParent);
+    return span;
   }
   private headers(response: ServerResponse): string {
     const requestId = randomUUID();

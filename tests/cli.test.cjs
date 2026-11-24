@@ -415,3 +415,31 @@ test('a replay receipt for an unexpected generation is rejected', async () => {
   expect(r.exitCode).toBe(4);
   expect(r.output.error.code).toBe('INVALID_RESPONSE');
 });
+test('CLI keeps the acceptance trace and propagates a validated response context through polling', async () => {
+  const parent = '00-11111111111111111111111111111111-2222222222222222-01';
+  const fetch = jest
+    .fn()
+    .mockResolvedValueOnce(response(receipt, 202, { traceparent: parent }))
+    .mockResolvedValueOnce(
+      response(completed, 200, {
+        traceparent: '00-11111111111111111111111111111111-3333333333333333-01',
+      }),
+    );
+  const r = await runCli(['demo', '--json'], deps(fetch));
+  expect(r.exitCode).toBe(0);
+  expect(r.output.acceptedTraceId).toBe('11111111111111111111111111111111');
+  expect(fetch.mock.calls[1][1].headers.traceparent).toBe(parent);
+});
+test('malformed tracing headers neither fail CLI success nor get forwarded', async () => {
+  const fetch = jest
+    .fn()
+    .mockResolvedValueOnce(
+      response(receipt, 202, { traceparent: 'private-trace-fixture' }),
+    )
+    .mockResolvedValueOnce(response(completed));
+  const r = await runCli(['demo'], deps(fetch));
+  expect(r.exitCode).toBe(0);
+  expect(r.output.traceId).toBeUndefined();
+  expect(fetch.mock.calls[1][1].headers.traceparent).toBeUndefined();
+  expect(JSON.stringify(r)).not.toContain('private');
+});

@@ -1,6 +1,6 @@
 # CLI contract and reviewer journey
 
-Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are implemented locally and prepared for exact-patch review; see [review 0021](../quality/reviews/0021-ticket-cli.md). Replay, scenario and evaluation commands below remain proposed. No released environment is claimed.
+Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are committed; see [review 0021](../quality/reviews/0021-ticket-cli.md). `ticket replay` with explicit generation/key and operator authorization is prepared for batch review in [review 0022](../quality/reviews/0022-ticket-replay-batch.md). Scenario/evaluation commands remain proposed. No released environment is claimed.
 
 ## First-run journey
 

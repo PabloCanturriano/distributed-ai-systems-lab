@@ -1,6 +1,6 @@
 # Containerized ticket CLI with bounded HTTP retries
 
-Status: implemented and locally verified, pending exact-patch approval. Base `284ee23` is committed and pushed; its [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45222243662). Proposed commit: `feat: add a Docker ticket CLI with bounded HTTP retries`.
+Status: approved, committed and pushed as `2f69c99` (`feat: add a Docker ticket CLI with bounded HTTP retries`). Its [hosted workflow passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45478107145), including the CLI gate on x64 and ARM64. The evidence below records that slice at implementation time; [review 0022](0022-ticket-replay-batch.md) adds replay.
 
 ## Purpose and affected files
 
@@ -34,4 +34,4 @@ The result remains a fixed simulated abstention: no retrieval, cited answers, to
 
 The endpoint is intentionally fixed to the trusted local API; remote opt-in/HTTPS configuration is deferred. Manifest digest format is checked, while seed/database consistency remains the trusted initializer's responsibility. The CLI may read all six fictional local credentials from its private volume; it is not a production secret store or a network firewall. Ancestor paths/host operator remain trusted. The configured 128 MiB memory limit is not a measured minimum. Client cancellation/deadline does not cancel durable work or prove that a timed-out POST was not accepted; the retained key enables safe deliberate retry. Crash-after-acceptance before stdout can still require a user-supplied stable key for cross-process recovery.
 
-The full diff, including all new files, needs owner approval before commit: [AGENTS.md](../../../AGENTS.md) requires “the owner's explicit approval of the exact patch before committing.” Push permission is already granted. No commit or push of this patch has been performed.
+At preparation time, the full diff required owner approval before commit: [AGENTS.md](../../../AGENTS.md) requires “the owner's explicit approval of the exact patch before committing.” The owner subsequently approved the exact patch and its push, recorded above.

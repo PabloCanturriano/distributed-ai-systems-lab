@@ -1,6 +1,6 @@
 # Local ticket CLI (prepared for review)
 
-The on-demand CLI uses only the public HTTP API. Its TypeScript implementation is locally tested and pending exact-patch review; it is not a release. The default endpoint is fixed to `http://api:3000` on the trusted Compose backend. Remote endpoint selection, replay, scenarios and evaluation commands are not implemented.
+The on-demand CLI uses only the public HTTP API. Its initial TypeScript implementation is committed and verified on hosted x64/ARM64; replay support is locally verified and prepared for batch review, not a release. The default endpoint is fixed to `http://api:3000` on the trusted Compose backend. Remote endpoint selection, scenarios and evaluation commands are not implemented. See [replay recovery](recovery.md#replay-of-a-failed-ticket-prepared-for-review) for the new operator command.
 
 ## Docker-only journey
 

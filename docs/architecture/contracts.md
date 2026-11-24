@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: authenticated submission, queued/processing reads, SQL admission and native consumption are committed. [Fenced simulated completion and terminal reads](../quality/reviews/0019-simulated-completions.md) are prepared for review: only simulated insufficient-evidence results and allowlisted failures are implemented. Answered/cited results, automatic execution and replay remain planned. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
+Status: authenticated submission, reads, admission, real Kafka consumption, fenced simulated completion, automatic execution and ticket CLI are committed. [Operator replay](../quality/reviews/0022-ticket-replay-batch.md) is implemented locally and prepared for batch review. Supported results remain simulated insufficient-evidence responses and allowlisted failures; answered/cited results and real-model work remain planned. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
 
 ## Common HTTP rules
 
@@ -110,7 +110,7 @@ Application-generated errors have this shape:
 }
 ```
 
-Other initial codes: `INVALID_REQUEST`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`, `DEPENDENCY_UNAVAILABLE`, and `INTERNAL_ERROR`. They map to `400`, `413`, `415`, `401`, `403`, `404`, `429`, `503`, and `500` respectively. Unknown errors use a generic message. HTTP success receipts remain stable; response request IDs are new for each HTTP attempt.
+Other initial codes: `INVALID_REQUEST`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`, `DEPENDENCY_UNAVAILABLE`, `INTERNAL_ERROR`, and `REPLAY_CONFLICT`. They map to `400`, `413`, `415`, `401`, `403`, `404`, `429`, `503`, `500`, and `409` respectively. Unknown errors use a generic message. HTTP success receipts remain stable; response request IDs are new for each HTTP attempt.
 
 ## Scheduling event
 

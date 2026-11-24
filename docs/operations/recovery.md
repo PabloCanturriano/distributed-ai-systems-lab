@@ -1,6 +1,6 @@
 # Recovery runbooks
 
-Status: proposed procedures. Operational commands and fault checkpoints do not exist yet. Implement and verify each procedure before presenting it as a runnable recovery guide.
+Status: the initial worker/relay recovery behavior is committed. Operator replay over API/CLI is locally verified and prepared for batch review below. Quarantine inspection/repair, general host-operation commands and full telemetry remain proposed.
 
 ## General procedure
 
@@ -47,3 +47,28 @@ Stop new claims and readiness, drain within the configured budget, and let inter
 - REC-06: wrong-project or stale-expectation operational mutations are rejected before changes.
 
 Evidence includes states before/after, observed assertions, bounded elapsed time, and safe cleanup. A container restart alone is not proof that the intended failure window was exercised.
+
+
+## Replay of a failed ticket (prepared for review)
+
+After reviewing the failure and correcting its cause, read the current ticket and explicitly replay that failed generation with an operator identity:
+
+```sh
+docker compose run --rm --no-deps -T cli ticket get <ticket-id> --identity harbor.operator --json
+docker compose run --rm --no-deps -T cli ticket replay <ticket-id> --generation 1 --key recovery-ticket-1 --identity harbor.operator --json
+docker compose run --rm --no-deps -T cli ticket wait <ticket-id> --identity harbor.operator --deadline 60 --json
+```
+
+Replace the ID and generation with the inspected values; the example's generation 1 is not an automatic discovery instruction. The CLI image must already be built and the stack started with both messaging/execution profiles as described in the [CLI guide](ticket-cli.md). The CLI is an on-demand image, not a continuously running service.
+
+Only an operator may replay. A new key requires the ticket to be failed at exactly the supplied generation; queued, processing, completed or changed-generation tickets return 409 `REPLAY_CONFLICT`. A reader/requester receives 403, and foreign/missing tickets return the same 404. The ordinary local provider completes with a simulated abstention, which is ineligible for replay; no runtime fault switch is introduced to force a demo failure.
+
+Replay returns a new queued generation. The prior execution, failure/job/attempt history and notification remain durable. The new scheduling event must traverse relay and Kafka/consumer admission before the executor can run it. There is no failed-topic consumer that automatically replays work. A new generation gets its own attempt budget; a duplicate replay request does not reset that budget.
+
+Use a stable key and the same expected generation when retrying a lost response. The original receipt is returned even after the new generation progresses; its generation may therefore differ from a later current ticket read. Reusing that key with another generation returns 409 `IDEMPOTENCY_CONFLICT`. Different concurrent keys for the same expected generation produce one replay and one conflict. Replay and initial submission use distinct operation scopes, and replay keys are also scoped by ticket.
+
+`POST /v1/tickets/{ticketId}/replays` accepts only `{ "expectedGeneration": 1 }` plus `Idempotency-Key`; the server owns tenant/principal/request identity. Replay shares submission's mutation/principal rate budgets. Expected generation must be an integer from 1 through 2147483646 so incrementing cannot overflow the PostgreSQL integer. CLI replay requires both `--generation` and `--key`, performs no implicit replay and does not automatically retry conflicts. It reports acceptance; use `ticket wait` to observe completion.
+
+The audit record, receipt, new execution, pointer change and outbox commit together. Internal audit records store actor, old/new generation and originating request ID, with no credential, question or answer payload. This batch adds no public history/audit or quarantine-repair endpoint. Client timeout does not establish that a replay failed to commit; keep the same key to resolve an uncertain outcome.
+
+`npm run test:replay` creates a real failed first generation via a trusted test-only worker actor after Kafka admission, then exercises the public operator replay/CLI. It proves the second generation stays queued with the consumer stopped and finishes through Kafka after restart, with history preserved. The actor is not copied into application images or exposed through the API. See [batch evidence and proposed commits](../quality/reviews/0022-ticket-replay-batch.md).

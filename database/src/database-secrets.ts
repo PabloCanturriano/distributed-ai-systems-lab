@@ -20,7 +20,7 @@ export const databaseRoles = [
 ] as const;
 export type DatabaseRole = (typeof databaseRoles)[number];
 const secretRoles = ['admin', ...databaseRoles] as const;
-export type SecretRole = (typeof secretRoles)[number];
+export type SecretRole = (typeof secretRoles)[number] | 'operations';
 
 function hasCode(error: unknown, code: string): boolean {
   return (
@@ -106,6 +106,15 @@ export async function initializeSecretVolumes(
     for (const role of secretRoles) await readDatabasePassword(root, role);
   for (const role of [...secretRoles, 'demo'])
     await prepareVolume(join(root, role));
+  // The additive operations credential is published by bootstrap only after it
+  // checks the existing login. Legacy fixtures need no operations mount.
+  try {
+    await lstat(join(root, 'operations'));
+    await prepareVolume(join(root, 'operations'));
+  } catch (error) {
+    if (!hasCode(error, 'ENOENT')) throw error;
+  }
+
   for (const role of secretRoles) {
     try {
       await readDatabasePassword(root, role);

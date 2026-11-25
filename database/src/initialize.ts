@@ -1,3 +1,4 @@
+import { provisionOperationsLogin } from './operations-login.js';
 import { Client, escapeIdentifier } from 'pg';
 import { z } from 'zod';
 import {
@@ -39,7 +40,9 @@ async function main(): Promise<void> {
   }
   if (action !== 'bootstrap' && action !== 'migrate' && action !== 'seed')
     throw new Error('Invalid initialization action');
-  async function connect(role: 'admin' | DatabaseRole): Promise<Client> {
+  async function connect(
+    role: 'admin' | DatabaseRole | 'operations',
+  ): Promise<Client> {
     const client = new Client({
       host: configuration.DB_HOST,
       port: configuration.DB_PORT,
@@ -83,6 +86,9 @@ async function main(): Promise<void> {
         const probe = await connect(role);
         await probe.end();
       }
+      await provisionOperationsLogin(client, root);
+      const operations = await connect('operations');
+      await operations.end();
       console.log(JSON.stringify({ event: 'bootstrap_complete' }));
     } else if (action === 'migrate') {
       const applied = await migrateDatabase(client);

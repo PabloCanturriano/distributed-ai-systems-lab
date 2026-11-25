@@ -28,6 +28,7 @@ services:
       - worker_secret:/run/lab/worker
       - relay_secret:/run/lab/relay
       - demo_credentials:/run/lab/demo
+      - operations_secret:/run/lab/operations
 
   postgres:
     image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
@@ -154,6 +155,7 @@ services:
       - api_secret:/run/lab/api:ro
       - worker_secret:/run/lab/worker:ro
       - relay_secret:/run/lab/relay:ro
+      - operations_secret:/run/lab/operations
 
   migrate:
     <<: *initializer
@@ -181,7 +183,6 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: api
-    environment:
       API_DEPENDENCIES: local
       API_PG_HOST: postgres
       API_REDIS_HOST: redis
@@ -291,6 +292,21 @@ services:
     mem_limit: 128m
     stop_grace_period: 5s
 
+  operations:
+    profiles: [operations]
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: operations
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    volumes:
+      - operations_secret:/run/lab/operations:ro
+    mem_limit: 128m
+    stop_grace_period: 5s
+
 networks:
   ingress: {}
   backend:
@@ -306,3 +322,4 @@ volumes:
   worker_secret:
   relay_secret:
   demo_credentials:
+  operations_secret:

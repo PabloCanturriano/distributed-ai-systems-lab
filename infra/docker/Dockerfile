@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/cli/package.json apps/cli/package.json
+COPY apps/operations/package.json apps/operations/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/configuration/package.json packages/configuration/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
@@ -14,6 +15,8 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY tsconfig.base.json ./
 COPY apps/cli/tsconfig.json apps/cli/tsconfig.json
 COPY apps/cli/src apps/cli/src
+COPY apps/operations/tsconfig.json apps/operations/tsconfig.json
+COPY apps/operations/src apps/operations/src
 COPY apps/api/tsconfig.json apps/api/tsconfig.json
 COPY apps/api/src apps/api/src
 COPY apps/worker/tsconfig.json apps/worker/tsconfig.json
@@ -22,7 +25,7 @@ COPY packages/configuration/tsconfig.json packages/configuration/tsconfig.json
 COPY packages/configuration/src packages/configuration/src
 COPY packages/telemetry/tsconfig.json packages/telemetry/tsconfig.json
 COPY packages/telemetry/src packages/telemetry/src
-RUN npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli
+RUN npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli --workspace=@lab/operations
 
 FROM manifests AS api-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api
@@ -32,6 +35,9 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/wor
 
 FROM manifests AS cli-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/cli
+
+FROM manifests AS operations-dependencies
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/operations
 
 FROM worker-dependencies AS relay-dependencies
 COPY infra/docker/prepare-kafka-native.mjs /tmp/prepare-kafka-native.mjs
@@ -84,6 +90,11 @@ COPY --from=build /app/apps/cli/dist ./apps/cli/dist
 ENTRYPOINT ["node", "apps/cli/dist/main.js"]
 CMD ["--help"]
 
+
+FROM runtime AS operations
+COPY --from=operations-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/apps/operations/dist ./apps/operations/dist
+ENTRYPOINT ["node", "apps/operations/dist/main.js"]
 
 FROM manifests AS database-build
 RUN npm ci --ignore-scripts --no-audit --no-fund

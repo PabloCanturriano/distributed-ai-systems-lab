@@ -1,0 +1,23 @@
+# ADR-0008: Bound host-authorized quarantine inspection and delivery repair
+
+Status: explicitly approved by the owner on 2026-11-24 to implement and test this bounded local operational interface. The owner selected “Apruebo ADR-0008 para implementar y probar”. Exact implementation patches still require review before commit.
+
+## Context
+
+The accepted recovery design specifies same-generation repair from authoritative state, a separate host-operator entry point/role, confirmation before mutation and audit. Its interface, grants, audit actor and receipt representation were explicitly left for implementation review. Business tenant operators must not gain host/database authority or a public fault/repair endpoint.
+
+## Decision
+
+- Add an on-demand `operations` Compose profile/image, without a server, host ports, Docker socket, raw ticket content or demo bearer credentials. It receives only its private operations database credential read-only. A host Node runner may invoke only fixed inspect, plan and repair commands through that image; it accepts no SQL or shell commands. Runtime configuration, credential locations and network endpoints cannot be selected by the caller. Host file options are limited to private JSON repair inputs/plans; the runtime credential location is fixed.
+- Add a dedicated `lab_operations_login`/`lab_operations` role through the reviewed initializer protocol, without admin/migration/seed/worker membership. Grant safe identity/state/quarantine projections and only the columns needed for canonical outbox INSERT, scoped receipt INSERT, repair audit INSERT and active scheduling-event pointer UPDATE. It cannot create/claim/finish jobs, change ticket messages/generations/status, delete history or rewind offsets.
+- Assign each database an immutable local environment UUID. A repair plan binds Compose project/working-directory identity, environment UUID, explicit tenant/ticket/current generation, expected scheduling event ID, quarantine source position/digest, fixed reason code and stable key. Inspect/plan is read-only. Apply requires the exact plan digest as explicit confirmation, plus revalidation of live project/environment and database-time state. Wrong project/environment or stale expectations fail before mutation.
+- In one ticket-first transaction, require current queued state and no job. Never infer authority or ticket identity from quarantined bytes. Rebuild a fresh canonical scheduling event using stored execution reason/correlation, advance its active scheduling reference and persist scoped idempotency plus a separate immutable repair ledger/audit containing old/new IDs, observed source and authenticated database session actor. Preserve all old quarantine/outbox/execution data.
+- Reuse `idempotency_records` with distinct `tickets:delivery-repair:v1` and ticket scope, preserving its existing receipt shape; a tenant-consistent companion ledger supplies the richer repair receipt/audit. Same key/validated plan parameters returns the original receipt even after delivery advances; changed input conflicts. Lock ordering remains ticket before execution/job checks.
+- Late old and new events may race: existing inbox/job uniqueness admits at most one job. Failure causation uses the event actually recorded on that job, not whichever scheduling pointer is newer. No automatic repair, execution bypass, budget reset, replay or public operational endpoint is added.
+- Tests use disposable projects/databases and explicit checkpoints. They cover concurrent repairs/admission, rollback and lost acknowledgement, scoped keys, stale/wrong-project guards, privilege denial, late event order and actual Kafka completion after repair. The normal application images contain no fault-injection route.
+
+## Alternatives and consequences
+
+A business HTTP repair endpoint would conflate tenant and host authority; direct operator SQL would bypass reviewable guards; resetting offsets or replaying raw quarantine bytes could repeat untrusted effects. These are rejected. The host operator and initializer remain trusted local actors, not a production admin identity system. New credential/role/volume and upgrade compatibility must be tested. Full telemetry remains the approved Collector/Jaeger/Prometheus topology with safe attributes, bounded export and no business dependency on export success.
+
+Approval of this ADR authorizes preparing and testing the described interface, not committing an unseen patch, publishing a release or mutating the owner's non-test demo. Test projects are disposable; real repair requires the operator's plan-bound confirmation.

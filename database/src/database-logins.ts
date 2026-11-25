@@ -7,17 +7,21 @@ import {
 
 export async function provisionDatabaseLogins(
   admin: Client,
-  passwords: Record<DatabaseRole, string>,
+  passwords: Partial<Record<DatabaseRole | 'operations', string>>,
+  roles: readonly (DatabaseRole | 'operations')[] = databaseRoles,
 ): Promise<void> {
-  for (const role of databaseRoles)
-    if (!validDatabasePassword(passwords[role]))
+  for (const role of roles)
+    if (
+      typeof passwords[role] !== 'string' ||
+      !validDatabasePassword(passwords[role]!)
+    )
       throw new Error('Invalid database login material');
   await admin.query('BEGIN');
   try {
     await admin.query("SET LOCAL lock_timeout='5s'");
     await admin.query("SET LOCAL statement_timeout='10s'");
     await admin.query('SELECT pg_advisory_xact_lock(41017, 3)');
-    for (const role of databaseRoles) {
+    for (const role of roles) {
       const login = `lab_${role}_login`;
       const group = `lab_${role}`;
       const result = await admin.query<{ safe: boolean }>(
@@ -27,7 +31,7 @@ export async function provisionDatabaseLogins(
       if (!result.rows.length) {
         // PostgreSQL utility statements cannot bind identifiers/passwords. Escape both.
         await admin.query(
-          `CREATE ROLE ${escapeIdentifier(login)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD ${escapeLiteral(passwords[role])}`,
+          `CREATE ROLE ${escapeIdentifier(login)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD ${escapeLiteral(passwords[role]!)}`,
         );
         await admin.query(
           `GRANT ${escapeIdentifier(group)} TO ${escapeIdentifier(login)} WITH INHERIT FALSE, SET TRUE`,

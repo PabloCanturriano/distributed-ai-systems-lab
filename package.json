@@ -11,7 +11,7 @@
     "node": ">=24.22.3 <25"
   },
   "scripts": {
-    "build": "npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/database --workspace=@lab/cli",
+    "build": "npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/database --workspace=@lab/cli --workspace=@lab/operations",
     "typecheck": "npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run typecheck --workspaces",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

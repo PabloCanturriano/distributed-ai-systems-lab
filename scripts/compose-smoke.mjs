@@ -98,7 +98,7 @@ async function report() {
     const fs = require('node:fs');
     const crypto = require('node:crypto');
     const hash = value => crypto.createHash('sha256').update(value).digest('hex');
-    const roles = ['admin','migrator','seed','api','worker','relay'];
+    const roles = ['admin','migrator','seed','api','worker','relay','operations'];
     const raw = fs.readFileSync('/run/lab/demo/identities/identities-v1.json');
     const manifest = JSON.parse(raw);
     console.log(JSON.stringify({
@@ -180,7 +180,7 @@ try {
   const before = await report();
   assert.equal(before.uid, 1000);
   assert.equal(before.mode, 0o600);
-  assert.equal(new Set(before.passwords).size, 6);
+  assert.equal(new Set(before.passwords).size, 7);
   assert.equal(new Set(before.secrets).size, 6);
   assert.deepEqual(await identityCounts(), {
     tenants: 2,
@@ -220,8 +220,18 @@ try {
     assert.equal(state.HostConfig.ReadonlyRootfs, true);
   }
   const bootstrap = await inspectService('bootstrap');
-  assert.equal(bootstrap.Mounts.length, 6);
-  assert.ok(bootstrap.Mounts.every((mount) => !mount.RW));
+  assert.equal(bootstrap.Mounts.length, 7);
+  assert.deepEqual(
+    bootstrap.Mounts.filter((mount) => mount.RW).map(
+      (mount) => mount.Destination,
+    ),
+    ['/run/lab/operations'],
+  );
+  assert.ok(
+    bootstrap.Mounts.filter(
+      (mount) => mount.Destination !== '/run/lab/operations',
+    ).every((mount) => !mount.RW),
+  );
   assert.equal((await inspectService('migrate')).Mounts.length, 1);
   assert.equal((await inspectService('seed')).Mounts.length, 2);
   console.log(

@@ -153,7 +153,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.audit_records,lab.execution_results,lab.execution_attempts, lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
+    'TRUNCATE lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts, lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
   );
   await migrator.query('UPDATE lab.principals SET disabled_at=NULL');
 });

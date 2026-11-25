@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 1048576
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 96
+    spike_limit_mib: 16
+  batch:
+    timeout: 1s
+    send_batch_size: 128
+    send_batch_max_size: 256
+exporters:
+  otlp_http/jaeger:
+    endpoint: http://jaeger:4318
+    timeout: 1s
+    sending_queue:
+      queue_size: 16
+      num_consumers: 1
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 2s
+      max_elapsed_time: 5s
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+service:
+  telemetry:
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

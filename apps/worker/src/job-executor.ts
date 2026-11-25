@@ -159,6 +159,7 @@ export class JobExecutor {
             claim.jobId,
             claim.attemptId,
             outcome.value,
+            ...(span.traceParent ? ([span.traceParent] as [string]) : []),
           );
           this.report(saved ? 'executor_completed' : 'executor_stale');
           traceOutcome = saved ? 'completed' : 'stale';

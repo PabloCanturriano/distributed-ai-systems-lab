@@ -68,7 +68,7 @@ async function main() {
   try {
     report('executor_started');
     await new JobExecutor(
-      new ExecutionOwnership(pool),
+      new ExecutionOwnership(pool, telemetry),
       new SimulatedAbstentionProvider(),
       report,
       telemetry,

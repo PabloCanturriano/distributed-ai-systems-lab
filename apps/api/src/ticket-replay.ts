@@ -1,4 +1,4 @@
-import { validTraceParent } from '@lab/telemetry';
+import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -35,8 +35,34 @@ export class TicketReplayError extends Error {
   }
 }
 export class TicketReplays {
-  constructor(private readonly pool: Pick<Pool, 'connect'>) {}
+  constructor(
+    private readonly pool: Pick<Pool, 'connect'>,
+    private readonly telemetry: Telemetry = noTelemetry,
+  ) {}
   async replay(input: unknown): Promise<ReplayReceipt> {
+    const parsed = schema.safeParse(input);
+    if (!parsed.success) return this.persist(input);
+    const span = this.telemetry.start(
+      'transaction.replay',
+      parsed.data.traceParent,
+    );
+    try {
+      const receipt = await this.persist({
+        ...parsed.data,
+        traceParent: span.traceParent ?? parsed.data.traceParent,
+      });
+      span.end('accepted', {
+        ticketId: receipt.ticketId,
+        generation: receipt.generation,
+        requestId: parsed.data.requestId,
+      });
+      return receipt;
+    } catch (error) {
+      span.end('failed');
+      throw error;
+    }
+  }
+  private async persist(input: unknown): Promise<ReplayReceipt> {
     const parsed = schema.safeParse(input);
     if (!parsed.success) throw new TicketReplayError('INVALID_REQUEST');
     const { tenantId, principalId, ticketId, requestId, key, body } =

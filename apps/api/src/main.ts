@@ -5,10 +5,10 @@ import { ApiDependencies } from './dependencies';
 
 async function main(): Promise<void> {
   const configuration = loadApiConfiguration(process.env);
-  const dependencies = configuration.dependencies
-    ? await ApiDependencies.create(configuration.dependencies)
-    : undefined;
   const telemetry = localTelemetry('lab-api', 'api');
+  const dependencies = configuration.dependencies
+    ? await ApiDependencies.create(configuration.dependencies, telemetry)
+    : undefined;
   const app = await createApi(
     dependencies,
     dependencies?.tickets,

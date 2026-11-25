@@ -1,3 +1,4 @@
+import { noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -44,10 +45,11 @@ export class TicketAccess implements TicketService {
   constructor(
     private readonly pool: Pick<Pool, 'connect'>,
     private readonly limits: SubmissionLimits,
+    telemetry: Telemetry = noTelemetry,
   ) {
-    this.submissions = new TicketSubmissions(pool);
+    this.submissions = new TicketSubmissions(pool, telemetry);
     this.reads = new TicketReads(pool);
-    this.replays = new TicketReplays(pool);
+    this.replays = new TicketReplays(pool, telemetry);
   }
   checkIngress(peer: string): Promise<void> {
     return this.limits.consume([

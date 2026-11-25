@@ -1,4 +1,4 @@
-import { validTraceParent } from '@lab/telemetry';
+import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -47,9 +47,35 @@ export class TicketSubmissionError extends Error {
 // Internal boundary only. Tenant/principal context must come from server authentication,
 // never directly from an HTTP body/header.
 export class TicketSubmissions {
-  constructor(private readonly pool: Pick<Pool, 'connect'>) {}
+  constructor(
+    private readonly pool: Pick<Pool, 'connect'>,
+    private readonly telemetry: Telemetry = noTelemetry,
+  ) {}
 
   async submit(input: unknown): Promise<TicketReceipt> {
+    const parsed = inputSchema.safeParse(input);
+    if (!parsed.success) return this.persist(input);
+    const span = this.telemetry.start(
+      'transaction.submit',
+      parsed.data.traceParent,
+    );
+    try {
+      const receipt = await this.persist({
+        ...parsed.data,
+        traceParent: span.traceParent ?? parsed.data.traceParent,
+      });
+      span.end('accepted', {
+        ticketId: receipt.ticketId,
+        generation: receipt.generation,
+        requestId: parsed.data.requestId,
+      });
+      return receipt;
+    } catch (error) {
+      span.end('failed');
+      throw error;
+    }
+  }
+  private async persist(input: unknown): Promise<TicketReceipt> {
     const parsed = inputSchema.safeParse(input);
     if (!parsed.success) throw new TicketSubmissionError('INVALID_REQUEST');
     const {

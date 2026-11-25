@@ -1,3 +1,4 @@
+import { refreshOperationalMetrics } from './operational-metrics';
 import { localTelemetry } from '@lab/telemetry';
 import { loadRelayConfiguration } from '@lab/configuration';
 import { constants } from 'node:fs';
@@ -78,13 +79,25 @@ async function main(): Promise<void> {
   );
   report('relay_started');
   try {
+    let nextSnapshot = 0;
     while (!controller.signal.aborted) {
+      if (Date.now() >= nextSnapshot) {
+        await refreshOperationalMetrics(pool, telemetry).catch(() => {
+          telemetry.increment?.('dependency.postgres');
+          report('relay_metrics_unavailable');
+        });
+        nextSnapshot = Date.now() + 5000;
+      }
       try {
         // One in-flight send keeps the 30-second lease comfortably above its deadline.
         const result = await relay.publishBatch(1, controller.signal);
         if (result.published) report('relay_publication_acknowledged');
-        if (result.retryable) report('relay_publication_deferred');
+        if (result.retryable) {
+          telemetry.increment?.('dependency.kafka');
+          report('relay_publication_deferred');
+        }
       } catch {
+        telemetry.increment?.('dependency.postgres');
         report('relay_batch_unavailable');
       }
       if (!controller.signal.aborted)

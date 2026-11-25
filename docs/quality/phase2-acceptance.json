@@ -269,7 +269,7 @@
     "evidence": [
       {
         "path": "scripts/tracing-smoke.mjs",
-        "contains": "publication.parentSpanId, root.spanId"
+        "contains": "publication.parentSpanId, transaction.spanId"
       },
       {
         "path": "tests/telemetry.test.cjs",

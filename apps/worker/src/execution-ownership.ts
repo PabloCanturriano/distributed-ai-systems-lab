@@ -1,4 +1,4 @@
-import { validTraceParent } from '@lab/telemetry';
+import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
@@ -48,7 +48,10 @@ const resultSchema = z.strictObject({
     ),
 });
 export class ExecutionOwnership {
-  constructor(private readonly pool: Pick<Pool, 'connect'>) {}
+  constructor(
+    private readonly pool: Pick<Pool, 'connect'>,
+    private readonly telemetry: Telemetry = noTelemetry,
+  ) {}
   private async transaction<T>(
     action: (client: PoolClient) => Promise<T>,
   ): Promise<T> {
@@ -192,7 +195,25 @@ export class ExecutionOwnership {
       ],
     );
   }
-  claim(): Promise<ExecutionClaim | null> {
+  async claim(): Promise<ExecutionClaim | null> {
+    const startedAt = new Date();
+    const claim = await this.claimTransaction();
+    if (claim) {
+      const span = this.telemetry.start(
+        'job.claim',
+        claim.traceParent,
+        startedAt,
+      );
+      span.end('scheduled', {
+        ticketId: claim.ticketId,
+        attemptId: claim.attemptId,
+        generation: claim.generation,
+      });
+      if (span.traceParent) claim.traceParent = span.traceParent;
+    }
+    return claim;
+  }
+  private claimTransaction(): Promise<ExecutionClaim | null> {
     return this.transaction(async (client) => {
       // Candidate discovery locks only the ticket first; competing workers skip
       // that ticket. Eligibility is rechecked after execution/job locks below.
@@ -272,12 +293,50 @@ export class ExecutionOwnership {
           )
         ).rowCount === 1
       );
+    }).then((saved) => {
+      if (!saved) this.telemetry.increment?.('lease.renew');
+      return saved;
     });
   }
   retry(jobId: string, attemptId: string): Promise<boolean> {
-    return this.finish(jobId, attemptId, true);
+    return this.finish(jobId, attemptId, true).then((saved) => {
+      if (!saved) this.telemetry.increment?.('lease.retry');
+      return saved;
+    });
   }
-  complete(jobId: string, attemptId: string, input: unknown): Promise<boolean> {
+  complete(
+    jobId: string,
+    attemptId: string,
+    input: unknown,
+    parent?: string,
+  ): Promise<boolean> {
+    this.validate(jobId, attemptId);
+    if (!resultSchema.safeParse(input).success)
+      throw new ExecutionOwnershipError('INVALID_REQUEST');
+    return this.traceResult(jobId, attemptId, input, parent);
+  }
+  private async traceResult(
+    jobId: string,
+    attemptId: string,
+    input: unknown,
+    parent?: string,
+  ): Promise<boolean> {
+    const span = this.telemetry.start('result.persist', parent);
+    try {
+      const saved = await this.persistResult(jobId, attemptId, input);
+      span.end(saved ? 'completed' : 'stale', { attemptId });
+      if (!saved) this.telemetry.increment?.('lease.complete');
+      return saved;
+    } catch (error) {
+      span.end('failed', { attemptId });
+      throw error;
+    }
+  }
+  private persistResult(
+    jobId: string,
+    attemptId: string,
+    input: unknown,
+  ): Promise<boolean> {
     this.validate(jobId, attemptId);
     const result = resultSchema.safeParse(input);
     if (!result.success) throw new ExecutionOwnershipError('INVALID_REQUEST');
@@ -310,7 +369,10 @@ export class ExecutionOwnership {
     });
   }
   fail(jobId: string, attemptId: string): Promise<boolean> {
-    return this.finish(jobId, attemptId, false);
+    return this.finish(jobId, attemptId, false).then((saved) => {
+      if (!saved) this.telemetry.increment?.('lease.fail');
+      return saved;
+    });
   }
   private validate(jobId: string, attemptId: string): void {
     if (!identity.safeParse([jobId, attemptId]).success)

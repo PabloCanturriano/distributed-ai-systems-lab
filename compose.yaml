@@ -183,6 +183,8 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: api
+    environment:
+      LAB_TELEMETRY_MODE: ${LAB_TELEMETRY_MODE:-local}
       API_DEPENDENCIES: local
       API_PG_HOST: postgres
       API_REDIS_HOST: redis
@@ -222,6 +224,8 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: relay
+    environment:
+      LAB_TELEMETRY_MODE: ${LAB_TELEMETRY_MODE:-local}
     read_only: true
     cap_drop: [ALL]
     security_opt: ['no-new-privileges:true']
@@ -242,6 +246,8 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: consumer
+    environment:
+      LAB_TELEMETRY_MODE: ${LAB_TELEMETRY_MODE:-local}
     read_only: true
     cap_drop: [ALL]
     security_opt: ['no-new-privileges:true']
@@ -262,6 +268,8 @@ services:
       context: .
       dockerfile: infra/docker/Dockerfile
       target: executor
+    environment:
+      LAB_TELEMETRY_MODE: ${LAB_TELEMETRY_MODE:-local}
     read_only: true
     cap_drop: [ALL]
     security_opt: ['no-new-privileges:true']
@@ -305,6 +313,51 @@ services:
     volumes:
       - operations_secret:/run/lab/operations:ro
     mem_limit: 128m
+    stop_grace_period: 5s
+
+  collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
+    command: [--config=/etc/lab/collector.yaml]
+    volumes: [./infra/observability/collector.yaml:/etc/lab/collector.yaml:ro]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend]
+    mem_limit: 192m
+    stop_grace_period: 5s
+
+  jaeger:
+    profiles: [observability]
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.23.0@sha256:3823829974ccfc2485d2e48b165579091f32295022ae80ca49704e2f4834116e
+    command: [--config=/etc/lab/jaeger.yaml]
+    volumes: [./infra/observability/jaeger.yaml:/etc/lab/jaeger.yaml:ro]
+    ports: ['127.0.0.1:${LAB_JAEGER_PORT:-16686}:16686']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend, ingress]
+    mem_limit: 256m
+    stop_grace_period: 5s
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+    command:
+      [
+        --config.file=/etc/lab/prometheus.yaml,
+        --storage.tsdb.path=/prometheus,
+        --storage.tsdb.retention.time=2h,
+        --storage.tsdb.retention.size=64MB,
+      ]
+    volumes: [./infra/observability/prometheus.yaml:/etc/lab/prometheus.yaml:ro]
+    tmpfs: ['/prometheus:uid=65534,gid=65534,mode=0700,size=100m']
+    ports: ['127.0.0.1:${LAB_PROMETHEUS_PORT:-9090}:9090']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    networks: [backend, ingress]
+    mem_limit: 256m
     stop_grace_period: 5s
 
 networks:

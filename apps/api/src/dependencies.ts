@@ -1,3 +1,4 @@
+import { noTelemetry, type Telemetry } from '@lab/telemetry';
 import type { ApiDependencyConfiguration } from '@lab/configuration';
 import { createClient } from '@redis/client';
 import { constants } from 'node:fs';
@@ -23,6 +24,7 @@ export class ApiDependencies implements ReadinessProbe {
   private constructor(
     configuration: ApiDependencyConfiguration,
     password: string,
+    private readonly telemetry: Telemetry,
   ) {
     this.postgres = new Pool({
       host: configuration.postgres.host,
@@ -59,12 +61,14 @@ export class ApiDependencies implements ReadinessProbe {
           this.redis.eval(script, { keys, arguments: args }),
         ),
       ),
+      telemetry,
     );
     this.connectRedis();
   }
 
   static async create(
     configuration: ApiDependencyConfiguration,
+    telemetry: Telemetry = noTelemetry,
   ): Promise<ApiDependencies> {
     const file = await open(
       '/run/lab/api/password',
@@ -85,14 +89,21 @@ export class ApiDependencies implements ReadinessProbe {
         Buffer.from(password, 'base64url').toString('base64url') !== password
       )
         throw new Error('Invalid API database credential file');
-      return new ApiDependencies(configuration, password);
+      return new ApiDependencies(configuration, password, telemetry);
     } finally {
       await file.close();
     }
   }
 
   private report(event: DependencyEvent): void {
-    if (!this.closed) console.warn(JSON.stringify({ event }));
+    if (!this.closed) {
+      this.telemetry.increment?.(
+        event.startsWith('postgres')
+          ? 'dependency.postgres'
+          : 'dependency.redis',
+      );
+      console.warn(JSON.stringify({ event }));
+    }
   }
 
   private connectRedis(): void {

@@ -123,3 +123,72 @@ test('stdout backpressure drops telemetry before another write can accumulate', 
     stream.destroy();
   }
 });
+test('a stalled exporter has bounded storage and never starts concurrent requests', async () => {
+  jest.useFakeTimers();
+  const { boundedProcessor } = require('../packages/telemetry/dist');
+  let callback;
+  const exporter = {
+    export: jest.fn((_, cb) => {
+      callback = cb;
+    }),
+    shutdown: async () => {},
+  };
+  const processor = boundedProcessor(exporter, 100);
+  try {
+    for (let i = 0; i < 1000; i++) processor.onEnd({});
+    expect(processor.statistics()).toEqual({
+      queued: 128,
+      inFlight: 0,
+      dropped: 872,
+      failures: 0,
+    });
+    jest.advanceTimersByTime(1000);
+    expect(exporter.export).toHaveBeenCalledTimes(1);
+    expect(processor.statistics()).toEqual({
+      queued: 96,
+      inFlight: 1,
+      dropped: 872,
+      failures: 1,
+    });
+    for (let i = 0; i < 1000; i++) processor.onEnd({});
+    expect(processor.statistics().queued).toBe(128);
+    callback({ code: 0 });
+    jest.advanceTimersByTime(200);
+    expect(exporter.export).toHaveBeenCalledTimes(2);
+    callback({ code: 0 });
+    await processor.shutdown();
+    expect(processor.statistics().queued).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+test('synchronous exporter failures are isolated and counted', async () => {
+  const { boundedProcessor } = require('../packages/telemetry/dist');
+  const processor = boundedProcessor({
+    export: () => {
+      throw Error('secret');
+    },
+    shutdown: async () => {},
+  });
+  processor.onEnd({});
+  await expect(processor.forceFlush()).resolves.toBeUndefined();
+  expect(processor.statistics().failures).toBe(1);
+  await processor.shutdown();
+});
+test('export shutdown returns within its deadline even when the exporter never resolves', async () => {
+  jest.useFakeTimers();
+  const { boundedProcessor } = require('../packages/telemetry/dist');
+  const processor = boundedProcessor(
+    { export: () => {}, shutdown: () => new Promise(() => {}) },
+    100,
+  );
+  try {
+    processor.onEnd({});
+    const shutdown = processor.shutdown();
+    jest.advanceTimersByTime(100);
+    await expect(shutdown).resolves.toBeUndefined();
+    expect(processor.statistics().queued).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});

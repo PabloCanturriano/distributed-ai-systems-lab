@@ -185,6 +185,8 @@ try {
     );
     return [
       'http.submit',
+      'transaction.submit',
+      'job.claim',
       'outbox.publish',
       'consumer.admit',
       'execution.run',
@@ -198,11 +200,19 @@ try {
       (s) => s.stage === 'consumer.admit' && s.outcome === 'scheduled',
     ),
     execution = records.find((s) => s.stage === 'execution.run');
-  assert.equal(publication.parentSpanId, root.spanId);
+  const transaction = records.find((s) => s.stage === 'transaction.submit');
+  const claim = records.find((s) => s.stage === 'job.claim');
+  const persistence = (await spans()).find(
+    (s) => s.traceId === traceId && s.stage === 'result.persist',
+  );
+  assert.equal(transaction.parentSpanId, root.spanId);
+  assert.equal(publication.parentSpanId, transaction.spanId);
   assert.equal(admission.parentSpanId, publication.spanId);
-  assert.equal(execution.parentSpanId, admission.spanId);
+  assert.equal(claim.parentSpanId, admission.spanId);
+  assert.equal(execution.parentSpanId, claim.spanId);
+  assert.equal(persistence.parentSpanId, execution.spanId);
   assert.equal(execution.outcome, 'completed');
-  assert.equal(root.spanId, origin.slice(36, 52));
+  assert.equal(transaction.spanId, origin.slice(36, 52));
   assert.equal(admission.spanId, job.trace_parent.slice(36, 52));
   assert.deepEqual((await cli(args)).ticket, accepted.ticket);
   assert.equal(

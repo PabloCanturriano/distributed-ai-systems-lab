@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(11);
+  expect(applied).toBe(12);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -129,7 +129,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(11);
+  ).toBe(12);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -282,7 +282,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(11);
+    ).toBe(12);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -693,7 +693,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3, 4, 5, 6, 7, 8, 9, 10])(
+test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -750,6 +750,11 @@ test.each([2, 3, 4, 5, 6, 7, 8, 9, 10])(
         await copyFile(
           'database/migrations/1795564800000_trace-origins.cjs',
           join(directory, '1795564800000_trace-origins.cjs'),
+        );
+      if (baselineCount >= 11)
+        await copyFile(
+          'database/migrations/1795651200000_delivery-repair.cjs',
+          join(directory, '1795651200000_delivery-repair.cjs'),
         );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
@@ -829,7 +834,7 @@ test.each([2, 3, 4, 5, 6, 7, 8, 9, 10])(
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(11 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(12 - baselineCount);
       if (pendingJob) {
         const job = (
           await upgrade.query('SELECT * FROM lab.execution_jobs WHERE id=$1', [
@@ -1003,5 +1008,31 @@ test('API readiness exposes only versioned bootstrap metadata and reflects commi
       "DELETE FROM lab.seed_manifests WHERE name='identities-v1'",
     );
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('relay can read bounded operational aggregates without base job or quarantine access', async () => {
+  const client = await connectAs('lab_relay');
+  try {
+    const rows = (await client.query('SELECT * FROM lab.operational_metrics'))
+      .rows;
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { metric: 'expired_leases', dimension: 'running', value: 0 },
+        { metric: 'queue_oldest_seconds', dimension: 'queued', value: 0 },
+      ]),
+    );
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(['dimension', 'metric', 'value']);
+      expect(Number.isFinite(row.value)).toBe(true);
+    }
+    await expect(
+      client.query('SELECT * FROM lab.execution_jobs'),
+    ).rejects.toMatchObject({ code: '42501' });
+    await expect(
+      client.query('SELECT * FROM lab.event_quarantine'),
+    ).rejects.toMatchObject({ code: '42501' });
+  } finally {
+    await client.end();
   }
 });

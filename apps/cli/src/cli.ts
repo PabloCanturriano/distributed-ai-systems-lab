@@ -27,6 +27,12 @@ interface Output {
   ticket?: Record<string, unknown>;
   error?: { code: string; message: string };
   help?: string;
+  scenarios?: Array<{
+    name: string;
+    execution: 'api' | 'host';
+    checkpoint: string;
+  }>;
+  assertions?: string[];
 }
 export interface CliResult {
   exitCode: number;
@@ -46,6 +52,9 @@ const uuid =
 const aliases = /^(harbor|summit)\.(reader|requester|operator)$/;
 const messages: Record<string, string> = {
   INVALID_ARGUMENTS: 'Arguments are invalid. Use --help.',
+  HOST_REQUIRED:
+    'This scenario requires the repository host runner and observed infrastructure checkpoints.',
+  ASSERTION_FAILED: 'Scenario assertions failed.',
   CREDENTIAL_UNAVAILABLE:
     'The selected local credential is unavailable or invalid.',
   DEADLINE_EXCEEDED: 'The overall command deadline expired.',
@@ -67,7 +76,7 @@ const messages: Record<string, string> = {
   ATTEMPTS_EXHAUSTED: 'Execution attempts exhausted.',
 };
 export const help =
-  'Usage: cli demo | ticket create --message <text> [--key <key>] | ticket get <id> | ticket wait <id> | ticket replay <id> --generation <n> --key <key>\nOptions: --identity <alias> --deadline <1..300 seconds> --json --no-color --help\nDefault identity: harbor.requester. Endpoint: fixed local http://api:3000. Results are simulated.\nScenarios and evaluation are not implemented.';
+  'Usage: cli demo | ticket create --message <text> [--key <key>] | ticket get <id> | ticket wait <id> | ticket replay <id> --generation <n> --key <key>\nOptions: --identity <alias> --deadline <1..300 seconds> --json --no-color --help\nDefault identity: harbor.requester. Endpoint: fixed local http://api:3000. Results are simulated.\nScenarios: scenario list | scenario run duplicate-submission. Host recovery uses node scripts/scenarios.mjs run <name>. Evaluation is not implemented.';
 function invalid(): never {
   throw new CliError('INVALID_ARGUMENTS', 2);
 }
@@ -86,7 +95,13 @@ function text(value: unknown, max: number): value is string {
   );
 }
 type Command =
-  'demo' | 'ticket create' | 'ticket get' | 'ticket wait' | 'ticket replay';
+  | 'demo'
+  | 'ticket create'
+  | 'ticket get'
+  | 'ticket wait'
+  | 'ticket replay'
+  | 'scenario list'
+  | 'scenario run';
 function parse(args: string[]):
   | { command: 'help'; json: boolean }
   | {
@@ -98,6 +113,7 @@ function parse(args: string[]):
       message: string | undefined;
       key: string | undefined;
       expectedGeneration: number | undefined;
+      scenario: string | undefined;
     } {
   // Reject duplicate switches explicitly; repeated identity/key selection must
   // never silently change which credential or retry key is used.
@@ -122,6 +138,20 @@ function parse(args: string[]):
     .option('--key <key>')
     .action((_options: unknown, command: Commander) => {
       selected = command;
+    });
+  let scenario: string | undefined;
+  const scenarioGroup = program.command('scenario');
+  scenarioGroup
+    .command('list')
+    .action((_options: unknown, command: Commander) => {
+      selected = command;
+    });
+  scenarioGroup
+    .command('run')
+    .argument('<name>')
+    .action((name: string, _options: unknown, command: Commander) => {
+      selected = command;
+      scenario = name;
     });
   const group = program.command('ticket');
   group
@@ -155,7 +185,9 @@ function parse(args: string[]):
   }
   if (!selected) invalid();
   const command = (
-    selected.name() === 'demo' ? 'demo' : `ticket ${selected.name()}`
+    selected.name() === 'demo'
+      ? 'demo'
+      : `${selected.parent?.name()} ${selected.name()}`
   ) as Command;
   const options = selected.optsWithGlobals<Record<string, string | boolean>>();
   const submit = command === 'ticket create' || command === 'demo';
@@ -197,6 +229,7 @@ function parse(args: string[]):
     identity,
     deadline: Number(seconds) * 1000,
     expectedGeneration,
+    scenario,
     json: options.json === true,
   } as const;
 }
@@ -292,6 +325,44 @@ const errorCodes: Record<number, string[]> = {
   500: ['INTERNAL_ERROR'],
   503: ['DEPENDENCY_UNAVAILABLE'],
 };
+export const scenarioCatalog: Array<{
+  name: string;
+  execution: 'api' | 'host';
+  checkpoint: string;
+}> = [
+  {
+    name: 'duplicate-submission',
+    execution: 'api',
+    checkpoint: 'two API acceptances return the same receipt',
+  },
+  {
+    name: 'delivery-repair',
+    execution: 'host',
+    checkpoint:
+      'real quarantine and expected-state repair with one admitted job',
+  },
+  {
+    name: 'crash-after-response',
+    execution: 'host',
+    checkpoint:
+      'provider response observed before persistence, process killed, lease expired',
+  },
+  {
+    name: 'crash-after-publication',
+    execution: 'host',
+    checkpoint: 'Kafka acknowledgment before relay acknowledgment',
+  },
+  {
+    name: 'crash-after-scheduling',
+    execution: 'host',
+    checkpoint: 'durable job before consumer offset commit',
+  },
+  {
+    name: 'collector-outage',
+    execution: 'host',
+    checkpoint: 'Collector stopped while a ticket completes',
+  },
+];
 export async function runCli(
   args: string[],
   deps: Dependencies,
@@ -313,6 +384,64 @@ export async function runCli(
     if (p.command === 'help') {
       output.outcome = 'help';
       output.help = help;
+    } else if (p.command === 'scenario list') {
+      output.outcome = 'listed';
+      output.scenarios = scenarioCatalog;
+    } else if (p.command === 'scenario run') {
+      const scenario = scenarioCatalog.find(
+        (value) => value.name === p.scenario,
+      );
+      if (!scenario) invalid();
+      if (scenario.execution === 'host') throw new CliError('HOST_REQUIRED', 4);
+      const key = (deps.key ?? randomUUID)();
+      output.key = key;
+      const args = [
+        'ticket',
+        'create',
+        '--message',
+        'Duplicate fictional scenario submission',
+        '--key',
+        key,
+        '--identity',
+        p.identity,
+        '--deadline',
+        String(p.deadline / 1000),
+        '--json',
+      ];
+      const first = await runCli(args, deps);
+      if (first.exitCode !== 0)
+        throw new CliError(
+          first.output.error?.code ?? 'INVALID_RESPONSE',
+          first.exitCode,
+        );
+      if (now() - started >= p.deadline)
+        throw new CliError('DEADLINE_EXCEEDED', 5);
+      const remaining = Math.max(
+        1,
+        Math.floor((started + p.deadline - now()) / 1000),
+      );
+      const second = await runCli(
+        args.map((value, index) =>
+          index === args.indexOf('--deadline') + 1 ? String(remaining) : value,
+        ),
+        deps,
+      );
+      if (second.exitCode !== 0)
+        throw new CliError(
+          second.output.error?.code ?? 'INVALID_RESPONSE',
+          second.exitCode,
+        );
+      if (now() - started >= p.deadline)
+        throw new CliError('DEADLINE_EXCEEDED', 5);
+      if (
+        JSON.stringify(first.output.ticket) !==
+        JSON.stringify(second.output.ticket)
+      )
+        throw new CliError('ASSERTION_FAILED', 1);
+      output.outcome = 'passed';
+      output.key = key;
+      if (first.output.ticket) output.ticket = first.output.ticket;
+      output.assertions = ['same-key-same-receipt'];
     } else {
       output.identity = p.identity;
       if (

@@ -67,6 +67,22 @@ try {
   await compose(['stop', 'executor']);
   const help = await cli(['--help', '--json']);
   assert.equal(help.outcome, 'help');
+  const scenarios = await cli(['scenario', 'list', '--json']);
+  assert(
+    scenarios.scenarios.some(
+      (x) => x.name === 'crash-after-response' && x.execution === 'host',
+    ),
+  );
+  assert.equal(
+    (await cli(['scenario', 'run', 'crash-after-response', '--json'], 4)).error
+      .code,
+    'HOST_REQUIRED',
+  );
+  assert.equal(
+    (await cli(['scenario', 'run', 'duplicate-submission', '--json'])).outcome,
+    'passed',
+  );
+
   const key = randomUUID();
   const accepted = await cli([
     'ticket',

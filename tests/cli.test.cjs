@@ -443,3 +443,68 @@ test('malformed tracing headers neither fail CLI success nor get forwarded', asy
   expect(fetch.mock.calls[1][1].headers.traceparent).toBeUndefined();
   expect(JSON.stringify(r)).not.toContain('private');
 });
+test('scenario list needs no credential and distinguishes required host checkpoints', async () => {
+  const d = deps(jest.fn());
+  const result = await runCli(['scenario', 'list', '--json'], d);
+  expect(result.exitCode).toBe(0);
+  expect(result.output.scenarios).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: 'duplicate-submission',
+        execution: 'api',
+      }),
+      expect.objectContaining({
+        name: 'crash-after-response',
+        execution: 'host',
+      }),
+    ]),
+  );
+  expect(d.credential).not.toHaveBeenCalled();
+  expect(d.fetch).not.toHaveBeenCalled();
+});
+test.each([
+  'crash-after-response',
+  'crash-after-publication',
+  'crash-after-scheduling',
+  'collector-outage',
+  'delivery-repair',
+])('API-only CLI cannot certify host scenario %s', async (name) => {
+  const d = deps(jest.fn()),
+    result = await runCli(['scenario', 'run', name, '--json'], d);
+  expect(result.exitCode).toBe(4);
+  expect(result.output.outcome).toBe('error');
+  expect(result.output.error.code).toBe('HOST_REQUIRED');
+  expect(d.credential).not.toHaveBeenCalled();
+  expect(d.fetch).not.toHaveBeenCalled();
+});
+test('the API scenario verifies both receipts and does not claim infrastructure recovery', async () => {
+  const d = deps(jest.fn(async () => response(receipt, 202))),
+    r = await runCli(['scenario', 'run', 'duplicate-submission', '--json'], d);
+  expect(r.exitCode).toBe(0);
+  expect(r.output.outcome).toBe('passed');
+  expect(r.output.assertions).toEqual(['same-key-same-receipt']);
+  expect(d.fetch).toHaveBeenCalledTimes(2);
+  expect(
+    d.fetch.mock.calls.map((x) => x[1].headers['idempotency-key']),
+  ).toEqual(['stable-key', 'stable-key']);
+});
+test('the API scenario reports an assertion failure when receipts differ', async () => {
+  const d = deps(
+    jest
+      .fn()
+      .mockResolvedValueOnce(response(receipt, 202))
+      .mockResolvedValueOnce(
+        response(
+          {
+            ...receipt,
+            ticketId: 'a3000000-0000-4000-8000-000000000002',
+            statusUrl: '/v1/tickets/a3000000-0000-4000-8000-000000000002',
+          },
+          202,
+        ),
+      ),
+  );
+  const r = await runCli(['scenario', 'run', 'duplicate-submission'], d);
+  expect(r.exitCode).toBe(1);
+  expect(r.output.error.code).toBe('ASSERTION_FAILED');
+});

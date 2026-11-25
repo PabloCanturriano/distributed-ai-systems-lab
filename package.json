@@ -22,13 +22,16 @@
     "test:compose": "node scripts/compose-smoke.mjs",
     "test:kafka": "node scripts/kafka-smoke.mjs",
     "test:kafka-client": "node scripts/kafka-client-smoke.mjs",
-    "test:relay": "node scripts/relay-smoke.mjs",
-    "test:consumer": "node scripts/consumer-smoke.mjs",
+    "test:relay": "node scripts/scenarios.mjs run crash-after-publication",
+    "test:consumer": "node scripts/scenarios.mjs run crash-after-scheduling",
     "test:executor": "node scripts/executor-smoke.mjs",
     "test:cli": "node scripts/cli-smoke.mjs",
     "test:replay": "node scripts/replay-smoke.mjs",
     "test:tracing": "node scripts/tracing-smoke.mjs",
-    "test:phase2": "node scripts/phase2-check.mjs"
+    "test:phase2": "node scripts/phase2-check.mjs",
+    "test:operations": "node scripts/scenarios.mjs run delivery-repair",
+    "test:response-crash": "node scripts/scenarios.mjs run crash-after-response",
+    "test:observability": "node scripts/scenarios.mjs run collector-outage"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

@@ -61,6 +61,9 @@ jobs:
       - run: npm run test:cli
       - run: npm run test:replay
       - run: npm run test:tracing
+      - run: npm run test:operations
+      - run: npm run test:response-crash
+      - run: npm run test:observability
 
   kafka-client:
     name: Native client, relay and consumer on Linux ARM64
@@ -87,6 +90,9 @@ jobs:
       - run: npm run test:cli
       - run: npm run test:replay
       - run: npm run test:tracing
+      - run: npm run test:operations
+      - run: npm run test:response-crash
+      - run: npm run test:observability
 
   foundation:
     name: Foundation gate

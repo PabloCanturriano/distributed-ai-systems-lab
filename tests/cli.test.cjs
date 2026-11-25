@@ -508,3 +508,52 @@ test('the API scenario reports an assertion failure when receipts differ', async
   expect(r.exitCode).toBe(1);
   expect(r.output.error.code).toBe('ASSERTION_FAILED');
 });
+test('answered results preserve only validated immutable citation references', async () => {
+  const citation = {
+    documentId: id,
+    documentVersion: 'v1',
+    chunkId: 'b3000000-0000-4000-8000-000000000001',
+  };
+  const value = {
+    ...completed,
+    result: {
+      ...completed.result,
+      outcome: 'answered',
+      answer: 'Simulated indexed excerpt',
+      citations: [citation],
+    },
+  };
+  const r = await runCli(
+    ['ticket', 'get', id],
+    deps(jest.fn(async () => response(value))),
+  );
+  expect(r.exitCode).toBe(0);
+  expect(r.output.ticket.result.citations).toEqual([citation]);
+});
+test.each(['empty', 'duplicate', 'abstention-with-citation'])(
+  'invalid citation/outcome combination fails closed: %s',
+  async (kind) => {
+    const c = {
+      documentId: id,
+      documentVersion: 'v1',
+      chunkId: 'b3000000-0000-4000-8000-000000000001',
+    };
+    const value = {
+      ...completed,
+      result: {
+        ...completed.result,
+        outcome:
+          kind === 'abstention-with-citation'
+            ? 'insufficient_evidence'
+            : 'answered',
+        citations: kind === 'empty' ? [] : kind === 'duplicate' ? [c, c] : [c],
+      },
+    };
+    const r = await runCli(
+      ['ticket', 'get', id],
+      deps(jest.fn(async () => response(value))),
+    );
+    expect(r.exitCode).toBe(4);
+    expect(r.output.error.code).toBe('INVALID_RESPONSE');
+  },
+);

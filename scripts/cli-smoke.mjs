@@ -185,6 +185,8 @@ try {
     true,
   );
   assert.equal(demo.outcome, 'completed');
+  assert.equal(demo.ticket.result.outcome, 'answered');
+  assert.equal(demo.ticket.result.citations.length, 1);
   assert.equal(demo.ticket.result.execution.providerMode, 'simulated');
   const human = await cli(['ticket', 'get', ticketId, '--no-color']);
   assert.deepEqual(human.ticket, finished.ticket);

@@ -197,7 +197,7 @@ function parse(args: string[]):
   }
   const message =
     command === 'demo'
-      ? 'What documentation supports resolving this fictional support ticket?'
+      ? 'Explain retry policy.'
       : typeof options.message === 'string'
         ? options.message.trim()
         : undefined;
@@ -275,10 +275,24 @@ function ticket(value: unknown, expectedId: string): Record<string, unknown> {
     const r = object(v.result),
       e = object(r.execution);
     if (
-      r.outcome !== 'insufficient_evidence' ||
+      !['insufficient_evidence', 'answered'].includes(String(r.outcome)) ||
       !text(r.answer, 8192) ||
       !Array.isArray(r.citations) ||
-      r.citations.length ||
+      r.citations.length > 5 ||
+      (r.outcome === 'answered') !== r.citations.length > 0 ||
+      r.citations.some((value) => {
+        const c = object(value);
+        return (
+          typeof c.documentId !== 'string' ||
+          !uuid.test(c.documentId) ||
+          typeof c.chunkId !== 'string' ||
+          !uuid.test(c.chunkId) ||
+          typeof c.documentVersion !== 'string' ||
+          !/^[A-Za-z0-9._-]{1,64}$/.test(c.documentVersion)
+        );
+      }) ||
+      new Set(r.citations.map((value) => object(value).chunkId)).size !==
+        r.citations.length ||
       e.providerMode !== 'simulated' ||
       !Number.isSafeInteger(e.attemptCount) ||
       (e.attemptCount as number) < 1 ||
@@ -292,7 +306,11 @@ function ticket(value: unknown, expectedId: string): Record<string, unknown> {
       result: {
         outcome: r.outcome,
         answer: r.answer,
-        citations: [],
+        citations: (r.citations as Array<Record<string, unknown>>).map((c) => ({
+          documentId: c.documentId,
+          documentVersion: c.documentVersion,
+          chunkId: c.chunkId,
+        })),
         execution: {
           providerMode: 'simulated',
           attemptCount: e.attemptCount,

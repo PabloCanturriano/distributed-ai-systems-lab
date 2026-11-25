@@ -32,7 +32,8 @@
     "test:operations": "node scripts/scenarios.mjs run delivery-repair",
     "test:response-crash": "node scripts/scenarios.mjs run crash-after-response",
     "test:observability": "node scripts/scenarios.mjs run collector-outage",
-    "test:phase3": "node scripts/phase3-check.mjs"
+    "test:phase3": "node scripts/phase3-check.mjs",
+    "test:rag": "node scripts/rag-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

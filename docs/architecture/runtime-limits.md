@@ -1,6 +1,6 @@
-# Proposed runtime limits
+# Runtime limits and future AI budgets
 
-Status: proposed starting values, not measured performance targets. Validate and adjust them with evidence in the foundation and reliability phases. Configuration must fail fast on invalid combinations.
+Status: work/ownership and HTTP limits below describe the committed local implementation; AI/tool budgets remain proposed until those adapters exist. These are finite policy bounds, not measured performance targets.
 
 ## Work and ownership
 
@@ -44,10 +44,10 @@ Retry only safe classified transient dependency errors: timeouts, temporary conn
 
 ## HTTP and local operations
 
-Authenticated requests: at most 120 requests per principal per minute. Submission: additionally 10 per tenant per minute. Replay: additionally 3 per tenant per minute. Use atomic limiter operations and define testable window boundaries; initial policy uses fixed UTC minute windows, so boundary bursts are a documented limitation.
+Authenticated requests: at most 120 requests per principal per minute. Submission: additionally 10 per tenant per minute. Replay shares the submission tenant budget of 10 per minute, as accepted in the committed replay batch; the earlier separate 3/minute proposal is not implemented. Use atomic limiter operations and define testable window boundaries; initial policy uses fixed UTC minute windows, so boundary bursts are a documented limitation.
 
 Unauthenticated ingress: 300 requests per source address per minute using only the actual peer address; do not trust forwarded headers by default. A Redis outage rejects affected business routes with 503. Health probes are separate and disclose no secrets. Local users can control container networking, so ingress limits are abuse controls, not host isolation.
 
-CLI default deadline is 120 seconds with one-second status polling. The scenario harness may use a separately reported 180-second bound for recovery checks. A deadline expiring does not cancel durable work or produce a passing scenario.
+CLI default deadline is 60 seconds with one-second status polling. Host scenarios report separate finite per-operation/startup/checkpoint bounds; they can wait for the real 30-second lease. A deadline expiring does not cancel durable work or produce a passing scenario.
 
 These values are design defaults. Exact environment variable names and memory/CPU allocation are defined with the approved Compose patch. Benchmark minimum hardware and cold-start time before publishing prerequisites; no measured resource requirement exists yet.

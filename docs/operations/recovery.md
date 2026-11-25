@@ -1,6 +1,6 @@
 # Recovery runbooks
 
-Status: the initial worker/relay recovery behavior is committed. Operator replay over API/CLI is committed and verified below. Quarantine inspection/repair, general host-operation commands and full telemetry remain proposed.
+Status: the initial worker/relay recovery behavior is committed. Operator replay over API/CLI is committed and verified below. The phase-3 working tree adds [local delivery repair](delivery-repair.md), fixed [host scenarios](../architecture/cli.md) and [OTLP observability](observability.md); final gate evidence and exact-patch review are recorded separately.
 
 ## General procedure
 
@@ -25,13 +25,13 @@ Host operations have a separate allowlisted entry point and database role; they 
 
 Quarantine is a safe record of invalid input, not a replay queue of trusted payloads. Inspect topic/partition/offset, digest, safe reason, current authoritative execution, and whether a valid job already exists. Raw messages are not exposed in business APIs or normal logs. Never trust tenant or resource IDs taken only from malformed input.
 
-Define a dedicated operator repair operation for a valid current queued execution with no job: it requires explicit tenant/ticket/generation, expected current scheduling event ID, reason, and a stable repair idempotency key. Lock the ticket and verify all expectations. Reject if work is already scheduled, the generation changed, or the execution is not queued.
+The approved dedicated operator repair operation for a valid current queued execution with no job: it requires explicit tenant/ticket/generation, expected current scheduling event ID, reason, and a stable repair idempotency key. Lock the ticket and verify all expectations. Reject if work is already scheduled, the generation changed, or the execution is not queued.
 
 Build a fresh canonical scheduling event from authoritative execution records, not quarantined bytes. Atomically write a new immutable outbox event, advance the execution's active scheduling-event reference, persist the repair receipt, and audit old/new IDs. Preserve all old outbox and quarantine records. A repeated repair key returns its original receipt without another event. Existing old events may still arrive; inbox/job uniqueness prevents duplicate work. The failure notification causation uses the event that actually scheduled the job, recorded at admission.
 
 This is delivery repair within the same generation, distinct from replay of a failed execution. It does not reset an attempt budget, bypass Kafka, change documents, or mark work completed. Non-current/unknown executions are inspected and left quarantined; do not create tickets from them.
 
-The operator interface, permission grants, audit actor representation, and receipt persistence need explicit implementation review. Store repair receipts in the scoped idempotency mechanism using a distinct operation version; do not reuse submission/replay scope. No hidden automatic repair runs at startup.
+The operator interface, grants, session actor and receipt persistence were explicitly approved for implementation in [ADR-0008](../adr/0008-local-delivery-repair.md); the exact patch still requires review. Store repair receipts in the scoped idempotency mechanism using a distinct operation version; do not reuse submission/replay scope. No hidden automatic repair runs at startup.
 
 ## Shutdown and upgrades
 
@@ -72,3 +72,10 @@ Use a stable key and the same expected generation when retrying a lost response.
 The audit record, receipt, new execution, pointer change and outbox commit together. Internal audit records store actor, old/new generation and originating request ID, with no credential, question or answer payload. This batch adds no public history/audit or quarantine-repair endpoint. Client timeout does not establish that a replay failed to commit; keep the same key to resolve an uncertain outcome.
 
 `npm run test:replay` creates a real failed first generation via a trusted test-only worker actor after Kafka admission, then exercises the public operator replay/CLI. It proves the second generation stays queued with the consumer stopped and finishes through Kafka after restart, with history preserved. The actor is not copied into application images or exposed through the API. See [batch evidence and proposed commits](../quality/reviews/0022-ticket-replay-batch.md).
+
+
+## Observed response-before-persistence crash
+
+`node scripts/scenarios.mjs run crash-after-response` uses a trusted test-only executor actor in a generated project. The actor prints a checkpoint only after the provider returned and immediately before calling durable completion. The host observes that checkpoint, verifies zero results, kills that actor, observes the real 30-second database lease expire and starts a replacement actor through `JobExecutor`. Its second provider response is observed; the attempt history is expired/succeeded and exactly one result exists. A completion with the old token returns false.
+
+The test provider is simulated. Two observed responses demonstrate possible repeated external calls, not a real third-party side effect. A transaction cannot make a nontransactional external response exactly once. Future side-effecting adapters require their own idempotency protocol; this phase makes no such guarantee. Actor code is injected only by the trusted harness and is absent from application image inputs.

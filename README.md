@@ -4,11 +4,9 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Phase 2 implemented; closure prepared for review.** The local workflow runs from authenticated CLI/API submission through transactional outbox, real Kafka, durable admission and automatic simulated execution to a tenant-scoped result. Idempotency, leases, fencing, operator replay and CI are already committed. This batch closes manual trace correlation and the [complete phase-2 acceptance gate](docs/quality/phase2.md).
+**Phase 3 locally verified; patches prepared for review.** The authenticated CLI/API → PostgreSQL outbox → real Kafka → durable admission → automatic simulated result workflow is committed through `522d404`, with passing x64 and ARM64 CI. Phase 3 adds audited local delivery repair, bounded OpenTelemetry export, Jaeger/Prometheus inspection and host-observed recovery scenarios in the working tree.
 
-Results remain explicitly simulated. Quarantine repair, full telemetry, retrieval with citations, tools/agent behavior and release are later phases. Each new implementation patch requires review before commit; this is not a production release.
-
-See [phase-2 verification](docs/quality/phase2.md) and [trace inspection](docs/operations/trace-correlation.md) for evidence and limits. Grounded answers remain planned.
+See the [phase-3 acceptance record](docs/quality/phase3.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for actual verification and limitations. Exact code patches still require owner approval before commit. Results remain simulated; retrieval with citations, tools/agent behavior and release remain future work.
 
 ## Local CLI
 

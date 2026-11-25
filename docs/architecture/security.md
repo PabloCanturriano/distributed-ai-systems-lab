@@ -85,7 +85,7 @@ The design requires dedicated non-superuser database roles for API, consumer/exe
 
 Internal Kafka/Redis/database ports remain on the Compose network. Only API and chosen inspection interfaces are published on loopback. Containers use a non-root user where the chosen image supports it and do not mount the Docker socket. Health endpoints disclose readiness status rather than credentials or full connection strings.
 
-Fault injection uses opt-in local scenario orchestration, not a public admin HTTP route. The scenario runner must not be callable as an AI tool and must not expose an arbitrary command executor. Infrastructure scenarios run with host-operator authority distinct from tenant operator permissions. Its exact interface is a remaining CLI design decision.
+Fault injection uses opt-in local scenario orchestration, not a public admin HTTP route. The scenario runner must not be callable as an AI tool and must not expose an arbitrary command executor. Infrastructure scenarios run with host-operator authority distinct from tenant operator permissions. The phase-3 patch implements the fixed [host scenario runner](cli.md) and the separately approved [delivery-repair interface](../adr/0008-local-delivery-repair.md); business credentials do not grant this authority.
 
 Real-model mode is an explicit opt-in because retrieved context and ticket content may be sent to an external provider. Only fictional data is supported in this lab. Keys are supplied through uncommitted local secret configuration and are never given to the model as context. Provider names, outbound hosts, budgets, and data-flow disclosures must be reviewed before enabling that integration.
 

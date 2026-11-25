@@ -43,3 +43,8 @@ Before a public working release, the owner also chooses the repository license a
 A release is eligible only when all required acceptance families are accounted for, required checks pass, the README journey works from a clean clone, and limitations match actual evidence. Run the image-built-from-source path and the published-image path if both are advertised. A previous successful run is not proof for a changed revision.
 
 No release status is claimed by committing this plan.
+
+
+## Phase-3 gate additions
+
+The proposed phase-3 workflow adds `test:operations`, `test:response-crash` and `test:observability` to both x64 and native ARM64 integration jobs, retaining all earlier gates. The local combined command is `npm run test:phase3`; [phase-3 evidence](phase3.md) distinguishes its completed source digest from a hosted run. The phase-2 head `522d404` has successful [x64/ARM64 CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45514368977); that result does not validate uncommitted phase-3 changes. Publishing the approved patches is required before any new hosted-CI claim.

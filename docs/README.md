@@ -1,6 +1,6 @@
 # Documentation map
 
-The committed repository implements the complete simulated ticket workflow, including CLI and operator replay. [Phase-2 closure](quality/phase2.md) adds verified manual tracing and an acceptance gate and is prepared for owner review. Full telemetry, delivery repair, retrieval, tools/agent behavior and release remain later work. The accepted architecture does not imply a release or approval of an unreviewed implementation patch.
+The committed repository includes the complete phase-2 simulated workflow, CLI/operator replay and manual tracing, with passing x64/ARM64 CI. The phase-3 working tree adds local audited repair, bounded OTLP/operational metrics and observed host recovery scenarios; all 14 gates and 42 criteria passed locally. See [phase-3 evidence](quality/phase3.md) for the exact source digest and pending patch approval. Retrieval, tools/agent behavior and release remain future work.
 
 ## Read in this order
 
@@ -47,6 +47,9 @@ The committed repository implements the complete simulated ticket workflow, incl
 - [CI and release](quality/ci-release.md): required gates, trusted publication, and deployment scope.
 
 ## Operations
+
+- [Delivery repair](operations/delivery-repair.md): private plan/confirmation, environment guards, audit and scoped credentials.
+- [Observability](operations/observability.md): opt-in OTLP, Jaeger/Prometheus queries, finite export and transient retention.
 
 - [Kafka foundation](operations/kafka-foundation.md): private broker, topic settings, persistence, failure gates, and test command.
 

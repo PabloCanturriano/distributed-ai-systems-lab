@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: architecture and the executable foundation are committed. Phase 2 is implemented and prepared for final owner review with [criterion-by-criterion evidence](quality/phase2.md) and a complete local gate. The committed base includes replay (`3be47f1`); quarantine repair, full telemetry, retrieval, tools, real-provider work and release remain future phases. New phase-2 closure patches still require exact-patch approval before commit.
+Status: phase 2 is committed/pushed through `522d404` with passing x64/ARM64 CI. Phase 3 is locally complete: all 14 gates and 42 criteria passed against unchanged sources. Its [acceptance record](quality/phase3.md) and exact patches are prepared for owner review before commit. Retrieval, tools/real-provider work and release remain future phases; implementation preparation is not commit approval.
 
 ## Phase 0: architecture review
 
@@ -20,13 +20,13 @@ Deliverables: CLI submission/read/wait, scoped idempotency, ticket generations, 
 
 Exit: HTTP-01 through HTTP-05, EVENT-01 through EVENT-03, DATA-01 through DATA-04, CLI-01 through CLI-04, and initial tenant/role checks pass at their required test layers. Include trace correlation sufficient to inspect the workflow. Idempotency and fencing are foundational, not postponed hardening.
 
-Implementation: see [phase-2 closure](quality/phase2.md) for the mandatory gates, actual report, implemented trace correlation and remaining phase-3 boundary. Publication of this closure is pending owner review; local verification is not hosted-CI or release status.
+Implementation: see [phase-2 closure](quality/phase2.md) for the mandatory gates, actual report, implemented trace correlation and remaining phase-3 boundary. The phase-2 closure is published with passing hosted CI; the original report remains tied to its recorded source digest.
 
 ## Phase 3: failures, recovery, and inspection
 
 Deliverables: classified retries and exhaustion, dead-letter notifications, expected-generation replay, durable quarantine/repair, stale-generation defense, full telemetry, and host-orchestrated failure scenarios.
 
-Exit: remaining HTTP/EVENT cases and DATA-01 through DATA-07 plus DATA-09 through DATA-10, REC-01 through REC-06, OBS-01 through OBS-04, and scenario-related CLI checks pass. Demonstrate crashes after publication, after scheduling, and after an external response before persistence. Preserve and explain possible repeated external calls.
+Exit: remaining HTTP/EVENT cases and DATA-01 through DATA-07 plus DATA-09 through DATA-10, REC-01 through REC-06, OBS-01 through OBS-04, and scenario-related CLI checks pass. Demonstrate crashes after publication, after scheduling, and after an external response before persistence. Preserve and explain possible repeated external calls. See [phase-3 evidence and review scope](quality/phase3.md); its local verification and approval status are recorded explicitly.
 
 ## Phase 4: offline retrieval and evidence
 

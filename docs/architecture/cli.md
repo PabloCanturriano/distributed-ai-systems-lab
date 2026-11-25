@@ -1,6 +1,6 @@
 # CLI contract and reviewer journey
 
-Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are committed; see [review 0021](../quality/reviews/0021-ticket-cli.md). `ticket replay` with explicit generation/key and operator authorization is committed in [review 0022](../quality/reviews/0022-ticket-replay-batch.md). Scenario/evaluation commands remain proposed. No released environment is claimed.
+Status: `demo`, `ticket create/get/wait`, identity selection, deadlines and JSON output are committed; see [review 0021](../quality/reviews/0021-ticket-cli.md). `ticket replay` with explicit generation/key and operator authorization is committed in [review 0022](../quality/reviews/0022-ticket-replay-batch.md). The phase-3 working tree adds an API duplicate scenario, a scenario catalog and a fixed host runner; evaluation remains proposed. No released environment is claimed.
 
 ## First-run journey
 
@@ -37,9 +37,11 @@ A `202` receipt is not a completed ticket. `ticket create` can exit successfully
 
 ## Infrastructure scenarios
 
-An application container never mounts the Docker socket. Host-level Compose orchestration is separate from the CLI and runs under the human operator's authority. The scenario runner is a fixed allowlisted repository tool, not an arbitrary shell-command endpoint or an agent tool. Its implementation requires owner approval.
+An application container never mounts the Docker socket. Host-level Compose orchestration is separate from the CLI and runs under the human operator's authority. The scenario runner is a fixed allowlisted repository tool, not an arbitrary shell-command endpoint or an agent tool. Its implementation is included in the phase-3 patch review.
 
-Proposed host invocation is `docker compose --profile scenarios run --rm scenario-check` only if it does not need Docker access; otherwise the reviewed host runner invokes fixed Compose actions directly. Do not publish an executable command until that interface is implemented and tested. Fault checkpoints are local-only startup options, disabled by default and absent from business HTTP routes.
+The implemented host interface is `node scripts/scenarios.mjs list` and `node scripts/scenarios.mjs run <name>`. Fixed names are `delivery-repair`, `crash-after-response`, `crash-after-publication`, `crash-after-scheduling` and `collector-outage`. Each invokes one repository harness without a shell, observes its required checkpoint marker and requires a successful complete harness before returning a single passed JSON result. Diagnostics go to stderr. Unknown names or extra arguments are rejected. Individual startup/operation/checkpoint waits are bounded by each harness.
+
+`cli scenario list` distinguishes API and host entries. `cli scenario run duplicate-submission` uses the same key for two ordinary authenticated API acceptances and asserts equal receipts; it makes no infrastructure recovery claim. All host entries return nonzero `HOST_REQUIRED` in the business CLI without reading credentials or making an API request. The business image cannot read an evidence file or declare a host crash passed from a normal HTTP result. Test-only crash actors are injected by the host harness, absent from image build inputs and business HTTP routes.
 
 API-only scenarios include duplicate HTTP submissions, authorization checks, and expected-generation replay. Crash-after-publication, consumer restart, Kafka outage, Redis outage, and stale-attempt checks require host preparation or the integration harness. The CLI must not claim that an API-only request proves these infrastructure failures.
 

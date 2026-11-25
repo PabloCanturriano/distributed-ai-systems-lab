@@ -60,3 +60,10 @@ Real-provider runs are opt-in trusted jobs with finite budgets and no secrets on
 ## Performance evidence
 
 Before setting throughput or hardware claims, measure cold and warm startup, end-to-end ticket latency, outbox/job queue age, and resource use under a declared workload. Report concurrency, input size, cache state, failure rate, and environment. Regressions require a repeatable baseline; no current performance SLO exists.
+
+
+## Phase-3 combined acceptance
+
+The [phase-3 gate](phase3.md), `npm run test:phase3`, retains all existing layers and requires audited delivery repair, observed response-before-persistence recovery and actual Collector/Jaeger/Prometheus inspection. Its [manifest](phase3-acceptance.json) covers 42 unique criteria; final verification status is recorded with the implementation digest. New tests exercise same/different-key repair and admission races behind observed PostgreSQL locks, rollback/lost acknowledgement, role denial, both late-event orders, project/environment/hash guards and credential upgrade/missing-file behavior.
+
+The host runner refuses success without both its required observed checkpoint and a successful full harness. The business CLI refuses host scenarios without making API calls. No actor code is included in application images. Real lease-expiry tests retain the production 30-second rule, while exporter queue/deadline tests use a deterministic fake clock. The simulated provider test observes repeated responses without claiming third-party side-effect idempotency.

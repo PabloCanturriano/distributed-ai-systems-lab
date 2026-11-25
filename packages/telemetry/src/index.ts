@@ -26,7 +26,8 @@ export type Stage =
   | 'transaction.submit'
   | 'transaction.replay'
   | 'job.claim'
-  | 'result.persist';
+  | 'result.persist'
+  | 'retrieval.search';
 export type Outcome =
   | 'accepted'
   | 'observed'
@@ -95,6 +96,7 @@ const stages = new Set<Stage>([
   'transaction.replay',
   'job.claim',
   'result.persist',
+  'retrieval.search',
 ]);
 const outcomes = new Set<Outcome>([
   'accepted',

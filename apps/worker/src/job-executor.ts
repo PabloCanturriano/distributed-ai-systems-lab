@@ -120,7 +120,12 @@ export class JobExecutor {
         const execution = Promise.resolve()
           .then(() => {
             if (work.signal.aborted) throw new Error('Execution interrupted');
-            return this.provider.execute(claim, work.signal);
+            return this.provider.execute(
+              span.traceParent
+                ? { ...claim, traceParent: span.traceParent }
+                : claim,
+              work.signal,
+            );
           })
           .then<Outcome, Outcome>(
             (value) => ({ kind: 'result', value }),

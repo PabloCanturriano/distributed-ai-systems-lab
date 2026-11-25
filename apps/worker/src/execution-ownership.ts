@@ -1,3 +1,4 @@
+import { citationSchema } from '@lab/knowledge';
 import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -35,18 +36,26 @@ interface LockedJob {
   correlation_id: string;
 }
 const identity = z.tuple([z.uuid(), z.uuid()]);
-const resultSchema = z.strictObject({
-  outcome: z.literal('insufficient_evidence'),
-  answer: z
-    .string()
-    .refine(
-      (value) =>
-        value.trim().length > 0 &&
-        Buffer.byteLength(value, 'utf8') <= 8192 &&
-        !value.includes('\0') &&
-        !/[\uD800-\uDFFF]/u.test(value),
-    ),
-});
+const resultSchema = z
+  .strictObject({
+    outcome: z.enum(['answered', 'insufficient_evidence']),
+    citations: z.array(citationSchema).max(5).default([]),
+    answer: z
+      .string()
+      .refine(
+        (value) =>
+          value.trim().length > 0 &&
+          Buffer.byteLength(value, 'utf8') <= 8192 &&
+          !value.includes('\0') &&
+          !/[\uD800-\uDFFF]/u.test(value),
+      ),
+  })
+  .refine(
+    (value) =>
+      (value.outcome === 'answered') === value.citations.length > 0 &&
+      new Set(value.citations.map((c) => c.chunkId)).size ===
+        value.citations.length,
+  );
 export class ExecutionOwnership {
   constructor(
     private readonly pool: Pick<Pool, 'connect'>,
@@ -70,9 +79,10 @@ export class ExecutionOwnership {
       const result = await action(client);
       await client.query('COMMIT');
       return result;
-    } catch {
+    } catch (error) {
       discard = true;
       await client.query('ROLLBACK').catch(() => {});
+      if (error instanceof ExecutionOwnershipError) throw error;
       throw new ExecutionOwnershipError('DEPENDENCY_UNAVAILABLE');
     } finally {
       client.release(discard);
@@ -343,6 +353,22 @@ export class ExecutionOwnership {
     return this.transaction(async (client) => {
       const job = await this.lock(client, jobId);
       if (!job || !(await this.owned(client, job, attemptId))) return false;
+      for (const citation of result.data.citations) {
+        const delivered = await client.query(
+          'SELECT chunk_id FROM lab.execution_evidence WHERE tenant_id=$1 AND ticket_id=$2 AND generation=$3 AND attempt_id=$4 AND chunk_id=$5 AND document_id=$6 AND document_version=$7',
+          [
+            job.tenant_id,
+            job.ticket_id,
+            job.generation,
+            attemptId,
+            citation.chunkId,
+            citation.documentId,
+            citation.documentVersion,
+          ],
+        );
+        if (delivered.rowCount !== 1)
+          throw new ExecutionOwnershipError('INVALID_REQUEST');
+      }
       await client.query(
         "INSERT INTO lab.execution_results(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_count,outcome,answer,provider_mode) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'simulated')",
         [
@@ -356,6 +382,20 @@ export class ExecutionOwnership {
           result.data.answer,
         ],
       );
+      for (const [i, citation] of result.data.citations.entries())
+        await client.query(
+          'INSERT INTO lab.result_citations(tenant_id,ticket_id,generation,attempt_id,position,document_id,document_version,chunk_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+          [
+            job.tenant_id,
+            job.ticket_id,
+            job.generation,
+            attemptId,
+            i + 1,
+            citation.documentId,
+            citation.documentVersion,
+            citation.chunkId,
+          ],
+        );
       await this.endAttempt(client, job, 'succeeded', null);
       await client.query(
         "UPDATE lab.execution_jobs SET status='completed',attempt_id=NULL,lease_expires_at=NULL WHERE id=$1",

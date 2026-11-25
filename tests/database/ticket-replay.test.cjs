@@ -42,6 +42,7 @@ beforeAll(async () => {
     tenant,
     'Fictional replay tenant',
   ]);
+  await require('./knowledge-fixture.cjs').seedEmptyCorpus(migrator, tenant);
   await migrator.query(
     "INSERT INTO lab.principals(id,tenant_id,role) VALUES($1,$2,'operator')",
     [principal, tenant],
@@ -70,7 +71,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
+    'TRUNCATE lab.result_citations,lab.execution_evidence,lab.execution_configurations,lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
   );
 });
 afterAll(async () => {

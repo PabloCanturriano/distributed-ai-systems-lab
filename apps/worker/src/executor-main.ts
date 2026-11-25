@@ -5,7 +5,9 @@ import { open } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { ExecutionOwnership } from './execution-ownership';
 import { JobExecutor } from './job-executor';
-import { SimulatedAbstentionProvider } from './simulated-provider';
+import { EvidenceProvider } from './evidence-provider';
+import { ExecutionEvidence } from './execution-evidence';
+import { KnowledgeRetrieval } from './knowledge-retrieval';
 
 const controller = new AbortController();
 const report = (event: string) => console.log(JSON.stringify({ event }));
@@ -69,7 +71,11 @@ async function main() {
     report('executor_started');
     await new JobExecutor(
       new ExecutionOwnership(pool, telemetry),
-      new SimulatedAbstentionProvider(),
+      new EvidenceProvider(
+        new ExecutionEvidence(pool),
+        new KnowledgeRetrieval(pool),
+        telemetry,
+      ),
       report,
       telemetry,
     ).run(controller.signal);

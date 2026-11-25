@@ -62,7 +62,7 @@ async function inspect(service) {
   return JSON.parse((await docker(['inspect', id])).stdout)[0];
 }
 const expectedAnswer =
-  'The simulated local provider has no indexed documentation available for this ticket.';
+  'The indexed evidence is insufficient to support this fictional question.';
 const httpCode = `import assert from 'node:assert/strict';import{readFileSync}from'node:fs';const manifest=JSON.parse(readFileSync('/run/lab/demo/identities/identities-v1.json','utf8'));const mode=process.argv[1],value=process.argv[2],alias=process.argv[3]??'harbor.reader';const c=manifest.credentials.find(x=>x.alias===(mode==='submit'?'harbor.requester':alias));const response=await fetch('http://api:3000/v1/tickets'+(mode==='submit'?'':'/'+value),{method:mode==='submit'?'POST':'GET',headers:{authorization:'Bearer '+c.lookupId+'.'+c.secret,...(mode==='submit'?{'content-type':'application/json','idempotency-key':value}:{})},...(mode==='submit'?{body:JSON.stringify({message:'executor-private-question-fixture'})}:{}),signal:AbortSignal.timeout(5000)});assert.equal(response.headers.get('cache-control'),'no-store');const raw=await response.text();for(const item of manifest.credentials)assert.equal(raw.includes(item.secret),false);assert.equal(response.status,mode==='submit'?202:alias==='summit.reader'?404:200);console.log(JSON.stringify(JSON.parse(raw)));`;
 async function submit(key = randomUUID()) {
   return JSON.parse((await oneShot('seed', httpCode, ['submit', key])).stdout);

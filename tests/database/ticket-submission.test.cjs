@@ -102,6 +102,11 @@ beforeAll(async () => {
     "INSERT INTO lab.principals(id,tenant_id,role) VALUES ($1,$2,'requester'),($3,$4,'reader'),($5,$4,'operator')",
     [otherPrincipal, otherTenant, reader, tenant, operator],
   );
+  await require('./knowledge-fixture.cjs').seedEmptyCorpus(migrator, tenant);
+  await require('./knowledge-fixture.cjs').seedEmptyCorpus(
+    migrator,
+    otherTenant,
+  );
   const login = `fixture_api_${randomBytes(4).toString('hex')}`;
   const password = randomBytes(32).toString('base64url');
   await admin.query(
@@ -153,7 +158,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts, lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
+    'TRUNCATE lab.result_citations,lab.execution_evidence,lab.execution_configurations,lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts, lab.execution_jobs, lab.consumer_inbox, lab.event_quarantine, lab.idempotency_records, lab.outbox_events, lab.ticket_executions, lab.tickets',
   );
   await migrator.query('UPDATE lab.principals SET disabled_at=NULL');
 });
@@ -643,7 +648,7 @@ test('worker admission privileges deny ticket content/pointer changes and ledger
   try {
     await client.query('SET ROLE lab_worker');
     for (const sql of [
-      'SELECT message FROM lab.tickets',
+      "UPDATE lab.tickets SET message='unauthorized mutation'",
       'SELECT secret_digest FROM lab.auth_credentials',
       'UPDATE lab.tickets SET current_generation=2',
       'SELECT payload FROM lab.outbox_events',

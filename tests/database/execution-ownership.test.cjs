@@ -43,6 +43,7 @@ beforeAll(async () => {
     tenant,
     'Fictional executor tenant',
   ]);
+  await require('./knowledge-fixture.cjs').seedEmptyCorpus(migrator, tenant);
   await migrator.query(
     "INSERT INTO lab.principals(id,tenant_id,role) VALUES($1,$2,'requester')",
     [principal, tenant],
@@ -71,7 +72,7 @@ beforeAll(async () => {
 }, 180000);
 afterEach(async () => {
   await migrator.query(
-    'TRUNCATE lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
+    'TRUNCATE lab.result_citations,lab.execution_evidence,lab.execution_configurations,lab.delivery_repairs,lab.audit_records,lab.execution_results,lab.execution_attempts,lab.execution_jobs,lab.consumer_inbox,lab.event_quarantine,lab.idempotency_records,lab.outbox_events,lab.ticket_executions,lab.tickets',
   );
 });
 afterAll(async () => {
@@ -659,7 +660,7 @@ test('attempt ownership cannot point at another job and terminal outcomes cannot
       ),
     ).rejects.toMatchObject({ code: '23514' });
     for (const sql of [
-      'SELECT message FROM lab.tickets',
+      "UPDATE lab.tickets SET message='unauthorized mutation'",
       'SELECT secret_digest FROM lab.auth_credentials',
       'SELECT payload FROM lab.outbox_events',
       'UPDATE lab.execution_jobs SET max_attempts=100',

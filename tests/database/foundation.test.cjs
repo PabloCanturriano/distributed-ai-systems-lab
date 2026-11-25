@@ -82,7 +82,7 @@ afterAll(async () => {
 
 test('clean install applies the identity migration as the non-superuser owner', async () => {
   const applied = await migrateDatabase(migrator);
-  expect(applied).toBe(12);
+  expect(applied).toBe(14);
   const { rows } = await migrator.query(
     'SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user',
   );
@@ -93,18 +93,29 @@ test('clean install applies the identity migration as the non-superuser owner', 
   expect(tables.rows.map((row) => row.tablename)).toEqual([
     'audit_records',
     'auth_credentials',
+    'chunk_embeddings',
     'consumer_inbox',
+    'corpus_snapshot_documents',
+    'corpus_snapshots',
     'delivery_repairs',
+    'document_chunks',
+    'document_versions',
+    'documents',
     'environment_identity',
     'event_quarantine',
     'execution_attempts',
+    'execution_configurations',
+    'execution_evidence',
     'execution_jobs',
     'execution_results',
     'idempotency_records',
     'outbox_events',
     'principals',
+    'result_citations',
+    'retrieval_profiles',
     'schema_migrations',
     'seed_manifests',
+    'tenant_corpus_profiles',
     'tenants',
     'ticket_executions',
     'tickets',
@@ -129,7 +140,7 @@ test('a second bootstrap/migration preserves existing rows and migration history
         'SELECT count(*)::int AS count FROM lab.schema_migrations',
       )
     ).rows[0].count,
-  ).toBe(12);
+  ).toBe(14);
 });
 
 test('bootstrap installs pgvector and keeps all five privilege roles non-login and non-admin', async () => {
@@ -282,7 +293,7 @@ test('a failing pending batch rolls back both schema changes and migration histo
           'SELECT count(*)::int AS count FROM lab.schema_migrations',
         )
       ).rows[0].count,
-    ).toBe(12);
+    ).toBe(14);
     expect(await migrateDatabase(migrator)).toBe(0);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -693,7 +704,7 @@ describe('durable local identity provisioning', () => {
   });
 });
 
-test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])(
+test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])(
   'upgrading the seeded %i-migration baseline preserves credentials and existing data',
   async (baselineCount) => {
     const { mkdtemp, copyFile, rm } = require('node:fs/promises');
@@ -756,6 +767,16 @@ test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])(
           'database/migrations/1795651200000_delivery-repair.cjs',
           join(directory, '1795651200000_delivery-repair.cjs'),
         );
+      if (baselineCount >= 12)
+        await copyFile(
+          'database/migrations/1795737600000_operational-metrics.cjs',
+          join(directory, '1795737600000_operational-metrics.cjs'),
+        );
+      if (baselineCount >= 13)
+        await copyFile(
+          'database/migrations/1795824000000_immutable-corpus.cjs',
+          join(directory, '1795824000000_immutable-corpus.cjs'),
+        );
       await admin.query('CREATE DATABASE lab_upgrade_test');
       created = true;
       upgrade = new Client({
@@ -783,21 +804,60 @@ test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])(
       let pendingAttempts = [];
       if (baselineCount >= 4) {
         await upgrade.query('RESET ROLE');
-        const {
-          TicketSubmissions,
-        } = require('../../apps/api/dist/ticket-submission.js');
+        // Seed the historical schema with its original SQL contract, not the new RAG adapter.
+        const { randomUUID, createHash } = require('node:crypto');
+        const ticket = randomUUID(),
+          event = randomUUID(),
+          request = randomUUID(),
+          tenant = 'a1000000-0000-4000-8000-000000000001';
+        const payload = JSON.stringify({
+          eventId: event,
+          type: 'ticket.execution.requested',
+          version: 1,
+          occurredAt: new Date().toISOString(),
+          tenantId: tenant,
+          ticketId: ticket,
+          generation: 1,
+          correlationId: request,
+          causationId: request,
+          data: { reason: 'submitted' },
+        });
+        await upgrade.query('BEGIN');
+        await upgrade.query(
+          'INSERT INTO lab.tickets(id,tenant_id,created_by,message,current_generation) VALUES($1,$2,$3,$4,1)',
+          [
+            ticket,
+            tenant,
+            'a2000000-0000-4000-8000-000000000002',
+            'Fictional preserved question',
+          ],
+        );
+        await upgrade.query(
+          "INSERT INTO lab.ticket_executions(tenant_id,ticket_id,generation,status,scheduling_reason,requested_by,correlation_id,scheduling_event_id) VALUES($1,$2,1,'queued','submitted',$3,$4,$5)",
+          [
+            tenant,
+            ticket,
+            'a2000000-0000-4000-8000-000000000002',
+            request,
+            event,
+          ],
+        );
+        await upgrade.query(
+          "INSERT INTO lab.outbox_events(event_id,tenant_id,ticket_id,generation,type,version,payload,payload_digest) VALUES($1,$2,$3,1,'ticket.execution.requested',1,$4,$5)",
+          [
+            event,
+            tenant,
+            ticket,
+            payload,
+            createHash('sha256').update(payload).digest(),
+          ],
+        );
+        await upgrade.query('COMMIT');
         const source = {
           async connect() {
             return { query: upgrade.query.bind(upgrade), release() {} };
           },
         };
-        await new TicketSubmissions(source).submit({
-          tenantId: 'a1000000-0000-4000-8000-000000000001',
-          principalId: 'a2000000-0000-4000-8000-000000000002',
-          requestId: require('node:crypto').randomUUID(),
-          key: 'upgrade-event',
-          body: { message: 'Fictional preserved question' },
-        });
         pendingEvent = (
           await upgrade.query(
             'SELECT event_id,payload,payload_digest FROM lab.outbox_events',
@@ -834,7 +894,7 @@ test.each([2, 3, 4, 5, 6, 7, 8, 9, 10, 11])(
         )
       ).rows[0].digest;
       await upgrade.query('SET ROLE lab_migrator');
-      expect(await migrateDatabase(upgrade)).toBe(12 - baselineCount);
+      expect(await migrateDatabase(upgrade)).toBe(14 - baselineCount);
       if (pendingJob) {
         const job = (
           await upgrade.query('SELECT * FROM lab.execution_jobs WHERE id=$1', [

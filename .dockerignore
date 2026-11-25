@@ -25,6 +25,14 @@
 !apps/worker/src/
 !apps/worker/src/**
 !packages/
+!packages/knowledge/
+!packages/knowledge/package.json
+!packages/knowledge/tsconfig.json
+!packages/knowledge/src/
+!packages/knowledge/src/**
+!fixtures/
+!fixtures/knowledge/
+!fixtures/knowledge/**
 !packages/telemetry/
 !packages/telemetry/package.json
 !packages/telemetry/tsconfig.json

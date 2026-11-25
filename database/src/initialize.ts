@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { provisionOperationsLogin } from './operations-login.js';
 import { Client, escapeIdentifier } from 'pg';
 import { z } from 'zod';
@@ -5,6 +6,7 @@ import {
   bootstrapDatabase,
   migrateDatabase,
   seedDemoIdentities,
+  seedKnowledge,
 } from './index.js';
 import { provisionDatabaseLogins } from './database-logins.js';
 import {
@@ -99,6 +101,13 @@ async function main(): Promise<void> {
         '/run/lab/demo/identities',
       );
       console.log(JSON.stringify({ event: 'identities_complete', ...result }));
+      const knowledge = await seedKnowledge(
+        client,
+        JSON.parse(await readFile('fixtures/knowledge/corpus-v1.json', 'utf8')),
+      );
+      console.log(
+        JSON.stringify({ event: 'knowledge_complete', ...knowledge }),
+      );
     }
   } finally {
     await client.end();

@@ -54,3 +54,5 @@ export {
 } from './seed-identities.js';
 
 export { provisionDatabaseLogins } from './database-logins.js';
+
+export { seedKnowledge } from './seed-knowledge.js';

@@ -8,6 +8,7 @@ COPY apps/operations/package.json apps/operations/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/configuration/package.json packages/configuration/package.json
 COPY packages/telemetry/package.json packages/telemetry/package.json
+COPY packages/knowledge/package.json packages/knowledge/package.json
 COPY database/package.json database/package.json
 
 FROM manifests AS build
@@ -25,7 +26,9 @@ COPY packages/configuration/tsconfig.json packages/configuration/tsconfig.json
 COPY packages/configuration/src packages/configuration/src
 COPY packages/telemetry/tsconfig.json packages/telemetry/tsconfig.json
 COPY packages/telemetry/src packages/telemetry/src
-RUN npm run build --workspace=@lab/configuration --workspace=@lab/telemetry && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli --workspace=@lab/operations
+COPY packages/knowledge/tsconfig.json packages/knowledge/tsconfig.json
+COPY packages/knowledge/src packages/knowledge/src
+RUN npm run build --workspace=@lab/configuration --workspace=@lab/telemetry --workspace=@lab/knowledge && npm run build --workspace=@lab/api --workspace=@lab/worker --workspace=@lab/cli --workspace=@lab/operations
 
 FROM manifests AS api-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/api
@@ -64,6 +67,8 @@ CMD ["node", "apps/api/dist/main.js"]
 
 # Select API or worker explicitly with --target; the worker exposes no HTTP port.
 FROM runtime AS worker
+COPY --from=build /app/packages/knowledge/package.json ./packages/knowledge/package.json
+COPY --from=build /app/packages/knowledge/dist ./packages/knowledge/dist
 COPY --from=worker-dependencies /app/node_modules ./node_modules
 COPY --from=build /app/packages/telemetry/package.json ./packages/telemetry/package.json
 COPY --from=build /app/packages/telemetry/dist ./packages/telemetry/dist
@@ -101,12 +106,17 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY tsconfig.base.json ./
 COPY database/tsconfig.json database/tsconfig.json
 COPY database/src database/src
-RUN npm run build --workspace=@lab/database
+COPY packages/knowledge/tsconfig.json packages/knowledge/tsconfig.json
+COPY packages/knowledge/src packages/knowledge/src
+RUN npm run build --workspace=@lab/knowledge && npm run build --workspace=@lab/database
 
 FROM manifests AS database-dependencies
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund --workspace=@lab/database
 
 FROM runtime AS database
+COPY --from=database-build /app/packages/knowledge/package.json ./packages/knowledge/package.json
+COPY --from=database-build /app/packages/knowledge/dist ./packages/knowledge/dist
+COPY fixtures/knowledge ./fixtures/knowledge
 COPY --from=database-dependencies /app/node_modules ./node_modules
 COPY --from=database-build /app/database/package.json ./database/package.json
 COPY --from=database-build /app/database/dist ./database/dist

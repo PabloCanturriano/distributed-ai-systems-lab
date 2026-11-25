@@ -1,3 +1,4 @@
+import { pinExecutionConfiguration } from './execution-configuration';
 import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -144,6 +145,7 @@ export class TicketSubmissions {
         "INSERT INTO lab.ticket_executions(tenant_id,ticket_id,generation,status,scheduling_reason,requested_by,correlation_id,scheduling_event_id) VALUES($1,$2,1,'queued','submitted',$3,$4,$5)",
         [tenantId, ticketId, principalId, requestId, eventId],
       );
+      await pinExecutionConfiguration(client, tenantId, ticketId, 1);
       const time = await client.query<{ occurred_at: Date }>(
         'SELECT transaction_timestamp() AS occurred_at',
       );

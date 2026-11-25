@@ -27,9 +27,13 @@ export type TicketStatus = TicketStatusBase &
     | {
         status: 'completed';
         result: {
-          outcome: 'insufficient_evidence';
+          outcome: 'answered' | 'insufficient_evidence';
           answer: string;
-          citations: [];
+          citations: Array<{
+            documentId: string;
+            documentVersion: string;
+            chunkId: string;
+          }>;
           execution: {
             providerMode: 'simulated';
             attemptCount: number;
@@ -84,13 +88,19 @@ export class TicketReads {
         job_attempt_count: number | null;
         failure_code: string | null;
         outcome: string | null;
+        citations: Array<{
+          documentId: string;
+          documentVersion: string;
+          chunkId: string;
+        }>;
         answer: string | null;
         provider_mode: string | null;
         result_attempt_count: number | null;
       }>(
         `SELECT t.id,t.current_generation,t.created_at,e.status,e.updated_at,
          j.status AS job_status,j.attempt_count AS job_attempt_count,j.failure_code,
-         r.outcome,r.answer,r.provider_mode,r.attempt_count AS result_attempt_count FROM lab.tickets t
+         r.outcome,r.answer,r.provider_mode,r.attempt_count AS result_attempt_count,
+         COALESCE((SELECT jsonb_agg(jsonb_build_object('documentId',c.document_id,'documentVersion',c.document_version,'chunkId',c.chunk_id) ORDER BY c.position) FROM lab.result_citations c WHERE c.tenant_id=e.tenant_id AND c.ticket_id=e.ticket_id AND c.generation=e.generation),'[]'::jsonb) AS citations FROM lab.tickets t
          JOIN lab.ticket_executions e ON e.tenant_id=t.tenant_id AND e.ticket_id=t.id AND e.generation=t.current_generation
          LEFT JOIN lab.execution_jobs j ON j.tenant_id=e.tenant_id AND j.ticket_id=e.ticket_id AND j.generation=e.generation
          LEFT JOIN lab.execution_results r ON r.tenant_id=e.tenant_id AND r.ticket_id=e.ticket_id AND r.generation=e.generation
@@ -114,7 +124,21 @@ export class TicketReads {
       } else if (
         row.status === 'completed' &&
         row.job_status === 'completed' &&
-        row.outcome === 'insufficient_evidence' &&
+        (row.outcome === 'insufficient_evidence' ||
+          row.outcome === 'answered') &&
+        Array.isArray(row.citations ?? []) &&
+        (row.citations ?? []).length <= 5 &&
+        (row.outcome === 'answered') === (row.citations ?? []).length > 0 &&
+        (row.citations ?? []).every(
+          (c) =>
+            z
+              .strictObject({
+                documentId: z.uuid(),
+                documentVersion: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/),
+                chunkId: z.uuid(),
+              })
+              .safeParse(c).success,
+        ) &&
         row.provider_mode === 'simulated' &&
         typeof row.answer === 'string' &&
         row.answer.trim().length > 0 &&
@@ -128,9 +152,9 @@ export class TicketReads {
           status: 'completed',
           failure: null,
           result: {
-            outcome: 'insufficient_evidence',
+            outcome: row.outcome,
             answer: row.answer,
-            citations: [],
+            citations: row.citations ?? [],
             execution: {
               providerMode: 'simulated',
               attemptCount: row.result_attempt_count,

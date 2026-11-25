@@ -1,6 +1,6 @@
 # Phase 3: failures, recovery and inspection
 
-Status: locally complete. All 14 mandatory gates and all 42 criteria passed on 2026-11-24, with unchanged implementation sources. Exact patches remain prepared for owner approval before commit. Architecture for the separate repair boundary was explicitly approved in ADR-0008. No unseen code commit is authorized. The committed phase-2 base is `522d404`, with successful x64/ARM64 CI; hosted CI for this phase requires the subsequently approved commits to be published.
+Status: locally complete. All 14 mandatory gates and all 42 criteria passed on 2026-11-24, with unchanged implementation sources. The owner approved the exact five-patch manifest and the batch was committed/pushed through `7651620`; [x64/ARM64 CI passed](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45525531992). Architecture for the separate repair boundary was explicitly approved in ADR-0008. No unseen code commit is authorized. The committed phase-2 base is `522d404`, with successful x64/ARM64 CI; hosted CI for this phase requires the subsequently approved commits to be published.
 
 ## Scope
 

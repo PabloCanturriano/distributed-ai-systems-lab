@@ -53,3 +53,8 @@ The non-root CLI image contains Commander and Node built-ins, without database/n
 The manifest reader requires a private owned directory, a small owned regular 0600 file opened without following a leaf symlink, the supported fixture version, six distinct known aliases/lookup IDs and canonical secrets. The seed process verifies fixture/database digests; the CLI validates digest format and structure, not database consistency. Trusted host-managed ancestor paths remain part of the local trust boundary.
 
 `npm run test:cli` creates and removes only its own disposable Compose project. It exercises the real CLI image through API → relay → Kafka → consumer → executor → HTTP result, with idempotency, isolation, deadline/permission/transport failures, private mount inspection and secret-free output checks. Separate tests use real loopback HTTP to prove redirect refusal, partial-response retry and stalled-body cancellation. See [review 0021](../quality/reviews/0021-ticket-cli.md) for actual results and limits.
+
+
+## Cited offline demo (phase 4)
+
+The phase-4 working tree changes the fixed demo question to `Explain retry policy.`. After the normal seed/build, `demo --identity harbor.requester --json` and `demo --identity summit.requester --json` return simulated excerpts from their respective immutable corpus. An answered result includes validated `documentId`, `documentVersion` and `chunkId` references; unsupported evidence returns an empty-citation abstention. See the [knowledge guide](knowledge.md) for algorithms, commands and separate retrieval measurements. No real model or tool execution is introduced.

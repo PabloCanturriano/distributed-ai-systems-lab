@@ -4,9 +4,9 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Phase 3 locally verified; patches prepared for review.** The authenticated CLI/API → PostgreSQL outbox → real Kafka → durable admission → automatic simulated result workflow is committed through `522d404`, with passing x64 and ARM64 CI. Phase 3 adds audited local delivery repair, bounded OpenTelemetry export, Jaeger/Prometheus inspection and host-observed recovery scenarios in the working tree.
+**Phase 4 locally verified; patches prepared for review.** The authenticated CLI/API → PostgreSQL outbox → real Kafka → durable admission → automatic simulated result workflow is committed through `522d404`, with passing x64 and ARM64 CI. Phase 3 is published through `7651620` with passing x64/ARM64 CI, including audited local delivery repair, bounded OpenTelemetry export and observed host recovery. Phase 4 adds an immutable tenant corpus, exact lexical retrieval, pinned execution context and simulated extracts with validated citations in the working tree.
 
-See the [phase-3 acceptance record](docs/quality/phase3.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for actual verification and limitations. Exact code patches still require owner approval before commit. Results remain simulated; retrieval with citations, tools/agent behavior and release remain future work.
+See the [phase-4 acceptance record](docs/quality/phase4.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for actual verification and limitations. Exact code patches still require owner approval before commit. Results remain simulated. The lexical retrieval report is separate from answer quality; tools/agent behavior, real-provider work and release remain future phases.
 
 ## Local CLI
 
@@ -16,7 +16,7 @@ docker compose --profile messaging --profile execution up --build --detach --wai
 docker compose run --rm -T cli demo --identity summit.requester --json
 ```
 
-The result is explicitly simulated. See the [CLI guide](docs/operations/ticket-cli.md) for create/get/wait commands, identities, exit codes and limits. This local workflow is not a release.
+The demo returns an explicitly simulated indexed excerpt with an immutable citation. See the [corpus and retrieval guide](docs/operations/knowledge.md) for algorithms and evaluation limits, and the [CLI guide](docs/operations/ticket-cli.md) for create/get/wait commands, identities, exit codes and limits. This local workflow is not a release.
 
 ## Target use case
 

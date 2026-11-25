@@ -1,10 +1,10 @@
 # Retrieval, agent, and tool design
 
-Status: proposed. No corpus, model adapter, tools, or evaluations are implemented. Read with [ADR-0003](../adr/0003-offline-ai-and-evaluation-boundaries.md), [security](security.md), and [runtime limits](runtime-limits.md).
+Status: phase-4 offline corpus, lexical retrieval, pinned configuration, evidence/citation persistence and extractive simulation are implemented in the working tree with [acceptance evidence](../quality/phase4.md). Agent state machines, tools and real-provider adapters remain proposed. Read with [ADR-0003](../adr/0003-offline-ai-and-evaluation-boundaries.md), [security](security.md), and [runtime limits](runtime-limits.md).
 
 ## Corpus and reproducibility
 
-Seed two fictional tenants with distinct API-operation and incident-response documentation, plus deliberately similar vocabulary and tenant-specific sentinel content. Source fixtures live under the proposed `fixtures/knowledge/` directory. Bootstrap only reads the repository-owned fixture manifest; there is no public upload or arbitrary path ingestion endpoint initially.
+Seed two fictional tenants with distinct API-operation and incident-response documentation, plus deliberately similar vocabulary and tenant-specific sentinel content. Owned source fixtures live under `fixtures/knowledge/`; the fixed versioned retrieval labels are in `fixtures/evaluation/`. Bootstrap only reads the repository-owned fixture manifest; there is no public upload or arbitrary path ingestion endpoint initially.
 
 A corpus manifest identifies document IDs, immutable versions, content digests, tenant membership, and a snapshot ID. Re-running bootstrap with an unchanged manifest is a no-op. Changed content under an existing immutable version is an error, not an overwrite. New documents require a new snapshot/version. Preserve cited snapshots and chunks for execution history.
 
@@ -22,7 +22,7 @@ For the small corpus, use exact cosine similarity in pgvector over only the auth
 
 A real embedding profile has its own model ID, dimensions, preprocessing version, and compatible storage/query path. It cannot reuse offline vectors. Do not add approximate indexes before measured query plans and recall evidence justify them. Cache keys include tenant, snapshot, profile, query digest, and relevant policy version; the initial design does not cache generated answers.
 
-## Agent execution
+## Planned agent execution (phase 5)
 
 Use a small state machine: prepare scoped context, request a model decision, validate a tool request or final answer, execute an allowed tool, then continue until a final answer or a budget boundary. Do not add open-ended planning, recursive agents, dynamic plugins, or a general workflow framework.
 
@@ -34,7 +34,7 @@ Final-answer objects contain outcome, answer, and citation references. `answered
 
 Provider errors map to safe internal classifications. No model-generated instructions can change permissions, provider endpoints, deadlines, or corpus selection. Attempt fencing remains required after a provider call, including a successful one.
 
-## Fixed read-only tools
+## Planned read-only tools (phase 5)
 
 All argument objects reject unknown fields. Tenant/principal context is injected by the executor and is never an argument the model can choose.
 

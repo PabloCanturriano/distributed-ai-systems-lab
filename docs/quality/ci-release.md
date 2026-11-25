@@ -48,3 +48,8 @@ No release status is claimed by committing this plan.
 ## Phase-3 gate additions
 
 The proposed phase-3 workflow adds `test:operations`, `test:response-crash` and `test:observability` to both x64 and native ARM64 integration jobs, retaining all earlier gates. The local combined command is `npm run test:phase3`; [phase-3 evidence](phase3.md) distinguishes its completed source digest from a hosted run. The phase-2 head `522d404` has successful [x64/ARM64 CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45514368977); that result does not validate uncommitted phase-3 changes. Publishing the approved patches is required before any new hosted-CI claim.
+
+
+## Phase-4 proposed CI additions
+
+Both x64 and native ARM64 jobs retain every previous check and add `evaluate:retrieval` and `test:rag`. The full local gate is `npm run test:phase4`; [phase-4 evidence](phase4.md) records its actual verification status. Published phase-3 head `7651620` has [successful CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45525531992). Hosted phase-4 success remains unverified until exact patches are approved and pushed. No release pipeline or publication is authorized by local test success.

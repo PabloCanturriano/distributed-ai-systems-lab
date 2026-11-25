@@ -152,3 +152,10 @@ The [phase-2 gate](../quality/phase2.md) verifies DATA-01 through DATA-04 using 
 ## Optional phase-2 trace origins
 
 The tenth migration adds nullable `trace_parent` metadata to outbox events and execution jobs, with canonical version-00/nonzero-ID constraints and insert-only runtime grants. Context is validated or dropped before persistence. Outbox payload, digest, event identity and scoped request hash remain unchanged; duplicate delivery/requests retain the original metadata. Existing rows stay null and readable after upgrade. The durable origins permit worker-process restarts without losing the normal trace chain; missing metadata never grants access or blocks valid scheduling. See [trace correlation](../operations/trace-correlation.md).
+
+
+## Phase-4 implemented provenance
+
+Migrations 13–14 add the owned immutable corpus/profile/snapshot model and `execution_configurations`, `execution_evidence`, and `result_citations`. A new accepted generation pins snapshot/profile/policy/provider in its transaction. Retries retain the row; replay selects the current active configuration. Legacy executions without this row preserve original abstention behavior.
+
+Attempt evidence binds current job/attempt, immutable chunk/version, snapshot membership and embedding profile through composite foreign keys. Completion admits only actually delivered references; answer, citations and lifecycle commit together. Deferred checks require citations for answered results and prohibit them for abstention. Earlier versions and evidence remain referenced. See [scope and role details](../operations/knowledge.md) and [actual acceptance](../quality/phase4.md). These changes do not add public ingestion, tenant RLS or an answer cache.

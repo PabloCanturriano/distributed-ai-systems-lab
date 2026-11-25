@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phase 2 is committed/pushed through `522d404` with passing x64/ARM64 CI. Phase 3 is locally complete: all 14 gates and 42 criteria passed against unchanged sources. Its [acceptance record](quality/phase3.md) and exact patches are prepared for owner review before commit. Retrieval, tools/real-provider work and release remain future phases; implementation preparation is not commit approval.
+Status: phases 2–3 are committed and pushed through `7651620`, with successful x64/ARM64 CI. Phase 4 is locally complete under ADR-0003: its [16-gate acceptance](quality/phase4.md) passed all 52 criteria against unchanged sources. Exact patches remain pending owner approval before commit. Tools/agent behavior, optional real-provider work and release remain future phases.
 
 ## Phase 0: architecture review
 

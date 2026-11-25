@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: authenticated submission, reads, admission, real Kafka consumption, fenced simulated completion, automatic execution and ticket CLI are committed. [Operator replay](../quality/reviews/0022-ticket-replay-batch.md) is committed; [manual trace correlation and phase-2 closure](../quality/phase2.md) are prepared for final owner review. Supported results remain simulated insufficient-evidence responses and allowlisted failures; answered/cited results and real-model work remain planned. Read with the [architecture overview](overview.md) and [ADR-0001](../adr/0001-durable-ai-execution.md).
+Status: phases 2–3 are committed and pushed with passing CI. The phase-4 working tree adds pinned offline corpus execution, delivered-evidence citation checks and simulated answered extracts alongside abstention; see [phase-4 evidence](../quality/phase4.md). Real-model and agent/tool behavior remain future work.
 
 ## Common HTTP rules
 

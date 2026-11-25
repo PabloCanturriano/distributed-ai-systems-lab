@@ -45,3 +45,7 @@ All local integration mutations target generated disposable projects/databases. 
 ## Final combined verification
 
 The final frozen-source run passed all 14 gates, all 42 criteria and trace correlation. It includes 292 fast tests (20 suites), 189 PostgreSQL tests (five suites) and every required real host/Kafka/OTLP scenario. Source digest: `37b11e91944eadf9603a7d1adf7cebb394e79652c9883223ce682c29201e93ed`. The ignored `artifacts/phase3-report.json` records the complete gate durations and source identity; generated raw logs are not committed. Exact-patch approval remains pending.
+
+## Publication after exact-patch approval
+
+The owner approved all five manifest-bound patches and requested push. They were committed in order as `5f1b5db`, `abe9941`, `7d5676d`, `77c12c8` and `7651620`, then pushed to `main`. [Hosted CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45525531992) completed successfully in all four jobs, including x64 and native ARM64. Earlier preparation/approval wording above records the historical review state rather than authorization for later phase-4 code.

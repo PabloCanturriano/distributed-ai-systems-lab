@@ -1,3 +1,4 @@
+import { agentSummarySchema, type AgentSummary } from '@lab/configuration';
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 
@@ -37,7 +38,9 @@ export type TicketStatus = TicketStatusBase &
           execution: {
             providerMode: 'simulated';
             attemptCount: number;
-            toolCalls: [];
+            toolCalls: AgentSummary['toolCalls'];
+            policy?: 'bounded-agent-v1';
+            modelTurns?: number;
           };
         };
         failure: null;
@@ -93,13 +96,14 @@ export class TicketReads {
           documentVersion: string;
           chunkId: string;
         }>;
+        agent_summary: unknown;
         answer: string | null;
         provider_mode: string | null;
         result_attempt_count: number | null;
       }>(
         `SELECT t.id,t.current_generation,t.created_at,e.status,e.updated_at,
          j.status AS job_status,j.attempt_count AS job_attempt_count,j.failure_code,
-         r.outcome,r.answer,r.provider_mode,r.attempt_count AS result_attempt_count,
+         r.outcome,r.answer,r.agent_summary,r.provider_mode,r.attempt_count AS result_attempt_count,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('documentId',c.document_id,'documentVersion',c.document_version,'chunkId',c.chunk_id) ORDER BY c.position) FROM lab.result_citations c WHERE c.tenant_id=e.tenant_id AND c.ticket_id=e.ticket_id AND c.generation=e.generation),'[]'::jsonb) AS citations FROM lab.tickets t
          JOIN lab.ticket_executions e ON e.tenant_id=t.tenant_id AND e.ticket_id=t.id AND e.generation=t.current_generation
          LEFT JOIN lab.execution_jobs j ON j.tenant_id=e.tenant_id AND j.ticket_id=e.ticket_id AND j.generation=e.generation
@@ -115,6 +119,13 @@ export class TicketReads {
         createdAt: row.created_at.toISOString(),
         updatedAt: row.updated_at.toISOString(),
       };
+      const summary =
+        row.agent_summary == null
+          ? null
+          : agentSummarySchema.safeParse(row.agent_summary);
+      if (summary && !summary.success)
+        throw new TicketReadError('DEPENDENCY_UNAVAILABLE');
+      const agent = summary?.success ? summary.data : null;
       let status: TicketStatus;
       if (
         (row.status === 'queued' || row.status === 'processing') &&
@@ -158,7 +169,10 @@ export class TicketReads {
             execution: {
               providerMode: 'simulated',
               attemptCount: row.result_attempt_count,
-              toolCalls: [],
+              toolCalls: agent?.toolCalls ?? [],
+              ...(agent
+                ? { policy: agent.policy, modelTurns: agent.modelTurns }
+                : {}),
             },
           },
         };

@@ -791,3 +791,273 @@ test('phase five activation upgrades only new acceptance while old receipts keep
     'bounded-agent-v1',
   );
 });
+async function activateAgent() {
+  const c = await seedPool.connect();
+  try {
+    await c.query('SET ROLE lab_seed');
+    await seedKnowledge(c, manifest(), 'bounded-agent-v1');
+  } finally {
+    c.release();
+  }
+}
+function agentProvider() {
+  const { AgentProvider } = require('../../apps/worker/dist/agent-provider');
+  return new AgentProvider(workerPool, {
+    version: 'services-v1',
+    services: [
+      {
+        tenantId: tenant,
+        serviceId: 'support-api',
+        status: 'operational',
+        observedAt: '2026-11-25T00:00:00.000Z',
+      },
+    ],
+  });
+}
+test('agent completion atomically persists delivered evidence, citations, bounded summary and lifecycle', async () => {
+  await seed();
+  await activateAgent();
+  const receipt = await accepted(),
+    claim = await claimed(receipt.ticketId);
+  const result = await agentProvider().execute(
+    claim,
+    new AbortController().signal,
+  );
+  expect(result.agent.summary).toEqual({
+    policy: 'bounded-agent-v1',
+    providerMode: 'simulated',
+    modelTurns: 4,
+    toolCalls: [
+      { name: 'search_documentation', outcome: 'observed' },
+      { name: 'get_ticket', outcome: 'observed' },
+      { name: 'get_service_status', outcome: 'observed' },
+    ],
+  });
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.execution_evidence',
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  const {
+    ExecutionOwnership,
+  } = require('../../apps/worker/dist/execution-ownership');
+  expect(
+    await new ExecutionOwnership(workerPool).complete(
+      claim.jobId,
+      claim.attemptId,
+      result,
+    ),
+  ).toBe(true);
+  const saved = (
+    await migrator.query('SELECT agent_summary FROM lab.execution_results')
+  ).rows[0];
+  expect(saved.agent_summary).toEqual(result.agent.summary);
+  expect(JSON.stringify(saved)).not.toMatch(
+    /SENTINEL|retry policy|arguments|content/,
+  );
+  const { TicketReads } = require('../../apps/api/dist/ticket-read');
+  const read = await new TicketReads(apiPool).get({
+    tenantId: tenant,
+    principalId: principal,
+    ticketId: receipt.ticketId,
+  });
+  expect(read.result.execution).toMatchObject({
+    policy: 'bounded-agent-v1',
+    modelTurns: 4,
+    toolCalls: result.agent.summary.toolCalls,
+  });
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.result_citations',
+      )
+    ).rows[0].n,
+  ).toBe(1);
+});
+test('invalid agent references roll back evidence and metadata before a valid completion can retry', async () => {
+  await seed();
+  await activateAgent();
+  const receipt = await accepted(),
+    claim = await claimed(receipt.ticketId);
+  const result = await agentProvider().execute(
+      claim,
+      new AbortController().signal,
+    ),
+    forged = structuredClone(result);
+  forged.citations[0].chunkId = randomUUID();
+  const {
+    ExecutionOwnership,
+  } = require('../../apps/worker/dist/execution-ownership');
+  const owner = new ExecutionOwnership(workerPool);
+  await expect(
+    owner.complete(claim.jobId, claim.attemptId, forged),
+  ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.execution_evidence',
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.execution_results',
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  expect(await owner.complete(claim.jobId, claim.attemptId, result)).toBe(true);
+});
+test('an agent response after lease loss cannot persist and recovery repeats read-only work under a new attempt', async () => {
+  await seed();
+  await activateAgent();
+  const receipt = await accepted(),
+    claim = await claimed(receipt.ticketId);
+  const result = await agentProvider().execute(
+    claim,
+    new AbortController().signal,
+  );
+  await migrator.query(
+    "UPDATE lab.execution_jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    [claim.jobId],
+  );
+  const {
+    ExecutionOwnership,
+  } = require('../../apps/worker/dist/execution-ownership');
+  const owner = new ExecutionOwnership(workerPool);
+  expect(await owner.complete(claim.jobId, claim.attemptId, result)).toBe(
+    false,
+  );
+  expect(
+    (
+      await migrator.query(
+        'SELECT count(*)::int AS n FROM lab.execution_evidence',
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  const next = await owner.claim();
+  expect(next.attemptNumber).toBe(2);
+  const retried = await agentProvider().execute(
+    next,
+    new AbortController().signal,
+  );
+  expect(await owner.complete(next.jobId, next.attemptId, retried)).toBe(true);
+  expect(await owner.complete(claim.jobId, claim.attemptId, result)).toBe(
+    false,
+  );
+});
+test('agent activation preserves the old provider and refuses incomplete or leaked summaries', async () => {
+  await seed();
+  const old = await accepted(),
+    claim = await claimed(old.ticketId);
+  await activateAgent();
+  const legacy = await agentProvider().execute(
+    claim,
+    new AbortController().signal,
+  );
+  expect(legacy.agent).toBeUndefined();
+  const {
+    ExecutionOwnership,
+  } = require('../../apps/worker/dist/execution-ownership');
+  const owner = new ExecutionOwnership(workerPool);
+  expect(await owner.complete(claim.jobId, claim.attemptId, legacy)).toBe(true);
+  const receipt = await accepted(),
+    next = await claimed(receipt.ticketId),
+    result = await agentProvider().execute(next, new AbortController().signal);
+  const { agent, ...missing } = result;
+  await expect(
+    owner.complete(next.jobId, next.attemptId, missing),
+  ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+  expect(() =>
+    owner.complete(next.jobId, next.attemptId, {
+      ...result,
+      agent: {
+        ...agent,
+        summary: { ...agent.summary, question: 'FAKE_PRIVATE_SECRET' },
+      },
+    }),
+  ).toThrow('INVALID_REQUEST');
+  expect(await owner.complete(next.jobId, next.attemptId, result)).toBe(true);
+  const c = await seedPool.connect();
+  try {
+    await c.query('SET ROLE lab_seed');
+    await expect(seedKnowledge(c, manifest())).rejects.toThrow(
+      'Knowledge provisioning failed',
+    );
+  } finally {
+    c.release();
+  }
+});
+test('database summary constraints reject forged names, excess keys and JSON null authority', async () => {
+  const base = {
+    policy: 'bounded-agent-v1',
+    providerMode: 'simulated',
+    modelTurns: 2,
+    toolCalls: [{ name: 'get_ticket', outcome: 'observed' }],
+  };
+  for (const bad of [
+    { ...base, policy: null },
+    { ...base, modelTurns: null },
+    { ...base, toolCalls: null },
+    { ...base, secret: 'FAKE_SECRET' },
+    { ...base, toolCalls: [{ name: null, outcome: 'observed' }] },
+    { ...base, toolCalls: [{ name: 'fetch_url', outcome: 'observed' }] },
+    { ...base, toolCalls: [{ name: 'get_ticket', outcome: null }] },
+    { ...base, modelTurns: 1 },
+  ]) {
+    expect(
+      (
+        await migrator.query(
+          'SELECT lab.valid_agent_summary($1::jsonb) AS valid',
+          [JSON.stringify(bad)],
+        )
+      ).rows[0].valid,
+    ).toBe(false);
+  }
+});
+test('policy replay binds the activated agent without reinterpreting a retried extractive generation', async () => {
+  await seed();
+  const receipt = await accepted(),
+    claim = await claimed(receipt.ticketId);
+  const {
+    ExecutionOwnership,
+  } = require('../../apps/worker/dist/execution-ownership');
+  const owner = new ExecutionOwnership(workerPool);
+  await owner.retry(claim.jobId, claim.attemptId);
+  await activateAgent();
+  await migrator.query(
+    "UPDATE lab.execution_jobs SET available_at=clock_timestamp()-interval '1 second'",
+  );
+  const retried = await owner.claim(),
+    old = await agentProvider().execute(retried, new AbortController().signal);
+  expect(old.agent).toBeUndefined();
+  await owner.fail(retried.jobId, retried.attemptId);
+  const operator = randomUUID();
+  await migrator.query(
+    "INSERT INTO lab.principals(id,tenant_id,role) VALUES($1,$2,'operator')",
+    [operator, tenant],
+  );
+  const { TicketReplays } = require('../../apps/api/dist/ticket-replay');
+  const replay = await new TicketReplays(apiPool).replay({
+    tenantId: tenant,
+    principalId: operator,
+    ticketId: receipt.ticketId,
+    requestId: randomUUID(),
+    key: randomUUID(),
+    body: { expectedGeneration: 1 },
+  });
+  expect(replay.generation).toBe(2);
+  expect(
+    (
+      await migrator.query(
+        'SELECT generation,policy_version FROM lab.execution_configurations WHERE ticket_id=$1 ORDER BY generation',
+        [receipt.ticketId],
+      )
+    ).rows,
+  ).toEqual([
+    { generation: 1, policy_version: 'extractive-simulated-v1' },
+    { generation: 2, policy_version: 'bounded-agent-v1' },
+  ]);
+});

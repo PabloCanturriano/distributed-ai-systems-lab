@@ -1,0 +1,17 @@
+{
+  "version": "services-v1",
+  "services": [
+    {
+      "tenantId": "a1000000-0000-4000-8000-000000000001",
+      "serviceId": "support-api",
+      "status": "operational",
+      "observedAt": "2026-11-25T00:00:00.000Z"
+    },
+    {
+      "tenantId": "a1000000-0000-4000-8000-000000000002",
+      "serviceId": "support-api",
+      "status": "degraded",
+      "observedAt": "2026-11-25T00:00:00.000Z"
+    }
+  ]
+}

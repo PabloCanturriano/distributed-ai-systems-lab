@@ -274,6 +274,24 @@ function ticket(value: unknown, expectedId: string): Record<string, unknown> {
   if (v.status === 'completed' && v.failure === null) {
     const r = object(v.result),
       e = object(r.execution);
+    const agent =
+      e.policy === 'bounded-agent-v1' &&
+      Number.isSafeInteger(e.modelTurns) &&
+      (e.modelTurns as number) >= 1 &&
+      (e.modelTurns as number) <= 4 &&
+      Array.isArray(e.toolCalls) &&
+      e.toolCalls.length <= 3 &&
+      e.toolCalls.length < (e.modelTurns as number) &&
+      e.toolCalls.every((value) => {
+        const c = object(value);
+        return (
+          Object.keys(c).length === 2 &&
+          ['search_documentation', 'get_service_status', 'get_ticket'].includes(
+            String(c.name),
+          ) &&
+          ['observed', 'not_found'].includes(String(c.outcome))
+        );
+      });
     if (
       !['insufficient_evidence', 'answered'].includes(String(r.outcome)) ||
       !text(r.answer, 8192) ||
@@ -297,7 +315,10 @@ function ticket(value: unknown, expectedId: string): Record<string, unknown> {
       !Number.isSafeInteger(e.attemptCount) ||
       (e.attemptCount as number) < 1 ||
       !Array.isArray(e.toolCalls) ||
-      e.toolCalls.length
+      (!agent &&
+        (e.policy !== undefined ||
+          e.modelTurns !== undefined ||
+          e.toolCalls.length !== 0))
     )
       throw new CliError('INVALID_RESPONSE', 4);
     return {
@@ -314,7 +335,15 @@ function ticket(value: unknown, expectedId: string): Record<string, unknown> {
         execution: {
           providerMode: 'simulated',
           attemptCount: e.attemptCount,
-          toolCalls: [],
+          toolCalls: agent
+            ? (e.toolCalls as Array<Record<string, unknown>>).map((c) => ({
+                name: c.name,
+                outcome: c.outcome,
+              }))
+            : [],
+          ...(agent
+            ? { policy: 'bounded-agent-v1', modelTurns: e.modelTurns }
+            : {}),
         },
       },
     };

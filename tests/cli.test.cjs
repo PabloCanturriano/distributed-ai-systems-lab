@@ -557,3 +557,62 @@ test.each(['empty', 'duplicate', 'abstention-with-citation'])(
     expect(r.output.error.code).toBe('INVALID_RESPONSE');
   },
 );
+test('bounded agent summaries survive CLI decoding without exposing tool inputs', async () => {
+  const execution = {
+    providerMode: 'simulated',
+    attemptCount: 2,
+    policy: 'bounded-agent-v1',
+    modelTurns: 4,
+    toolCalls: [
+      { name: 'search_documentation', outcome: 'observed' },
+      { name: 'get_ticket', outcome: 'observed' },
+      { name: 'get_service_status', outcome: 'not_found' },
+    ],
+  };
+  const value = { ...completed, result: { ...completed.result, execution } };
+  const result = await runCli(
+    ['ticket', 'get', id],
+    deps(jest.fn(async () => response(value))),
+  );
+  expect(result.exitCode).toBe(0);
+  expect(result.output.ticket.result.execution).toEqual(execution);
+});
+test.each([
+  {
+    policy: 'bounded-agent-v1',
+    modelTurns: 1,
+    toolCalls: [{ name: 'get_ticket', outcome: 'observed' }],
+  },
+  { policy: 'bounded-agent-v1', modelTurns: 5, toolCalls: [] },
+  {
+    policy: 'bounded-agent-v1',
+    modelTurns: 2,
+    toolCalls: [{ name: 'fetch_url', outcome: 'observed' }],
+  },
+  {
+    policy: 'bounded-agent-v1',
+    modelTurns: 2,
+    toolCalls: [
+      {
+        name: 'get_ticket',
+        outcome: 'observed',
+        arguments: { secret: 'FAKE_SECRET' },
+      },
+    ],
+  },
+  { policy: 'invented', modelTurns: 1, toolCalls: [] },
+])('invalid tool summaries fail closed: %j', async (summary) => {
+  const value = {
+    ...completed,
+    result: {
+      ...completed.result,
+      execution: { ...completed.result.execution, ...summary },
+    },
+  };
+  const result = await runCli(
+    ['ticket', 'get', id],
+    deps(jest.fn(async () => response(value))),
+  );
+  expect(result.output.error.code).toBe('INVALID_RESPONSE');
+  expect(JSON.stringify(result)).not.toContain('FAKE_SECRET');
+});

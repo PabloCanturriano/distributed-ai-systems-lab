@@ -66,6 +66,7 @@ jobs:
       - run: npm run test:observability
       - run: npm run evaluate:retrieval
       - run: npm run test:rag
+      - run: npm run evaluate:workflow
 
   kafka-client:
     name: Native client, relay and consumer on Linux ARM64
@@ -97,6 +98,7 @@ jobs:
       - run: npm run test:observability
       - run: npm run evaluate:retrieval
       - run: npm run test:rag
+      - run: npm run evaluate:workflow
 
   foundation:
     name: Foundation gate

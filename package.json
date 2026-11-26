@@ -36,6 +36,7 @@
     "evaluate:retrieval": "node scripts/retrieval-eval.mjs",
     "test:rag": "node scripts/rag-smoke.mjs",
     "test:phase4": "node scripts/phase4-check.mjs",
+    "test:phase5": "node scripts/phase5-check.mjs",
     "evaluate:workflow": "npm run build && node scripts/agent-workflow-eval.mjs"
   },
   "devDependencies": {

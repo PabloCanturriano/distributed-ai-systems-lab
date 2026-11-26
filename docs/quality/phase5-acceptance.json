@@ -1,0 +1,737 @@
+{
+  "schemaVersion": 1,
+  "phase": 5,
+  "criteria": [
+    {
+      "id": "HTTP-01",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "submission commits one ticket, execution, receipt and pending event together"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "assert.deepEqual(counts"
+        }
+      ],
+      "scope": "Authenticated acceptance and atomic durable scheduling intent."
+    },
+    {
+      "id": "HTTP-02",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent equal submissions wait on database uniqueness and share one receipt"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "const replies=await Promise.all"
+        }
+      ],
+      "scope": "Concurrent same-key/input HTTP and SQL reservations return one receipt."
+    },
+    {
+      "id": "HTTP-03",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent changed input yields one winner and one conflict"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": ".status,409"
+        }
+      ],
+      "scope": "Changed validated input conflicts without another ticket/event."
+    },
+    {
+      "id": "HTTP-04",
+      "gates": ["test:database", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "a lost commit acknowledgement returns a safe error and retry observes committed receipt"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "Accepted response body deliberately discarded"
+        }
+      ],
+      "scope": "Lost real response body after 202, later completion, same-key original receipt."
+    },
+    {
+      "id": "HTTP-05",
+      "gates": ["test:database", "test:cli", "test:replay", "test:tracing"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "foreign and missing ticket IDs have the same non-disclosing result"
+        },
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "NOT_FOUND"
+        }
+      ],
+      "scope": "Read/replay tenant isolation and no mutation."
+    },
+    {
+      "id": "EVENT-01",
+      "gates": ["test:database", "test:consumer"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "concurrent redelivery of one event commits one inbox identity and one job"
+        }
+      ],
+      "scope": "Durable duplicate transport admission through SQL and real Kafka."
+    },
+    {
+      "id": "EVENT-02",
+      "gates": ["test:database", "test:consumer"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "different concurrent event identities for one generation retain every inbox identity but one job"
+        }
+      ],
+      "scope": "Different event identities cannot create replacement work."
+    },
+    {
+      "id": "EVENT-03",
+      "gates": ["test:consumer"],
+      "evidence": [
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "consumer_sql_checkpoint"
+        },
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "Crash after SQL commit during rebalance redelivered"
+        }
+      ],
+      "scope": "Host-killed SQL-before-offset checkpoint with broker offset/rebalance observations."
+    },
+    {
+      "id": "DATA-01",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "a failure after inserting %s rolls back every submission row"
+        }
+      ],
+      "scope": "Real PostgreSQL trigger failure after each submission write."
+    },
+    {
+      "id": "DATA-02",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "composite creator references reject cross-tenant rows independently of application checks"
+        },
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "job references cannot combine one admitted event with a different tenant execution"
+        }
+      ],
+      "scope": "Tenant-consistent relational references for implemented ticket workflow."
+    },
+    {
+      "id": "DATA-03",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "concurrent claimers assign one token and consume one attempt for a job"
+        }
+      ],
+      "scope": "Real concurrent claims retain one active owner."
+    },
+    {
+      "id": "DATA-04",
+      "gates": ["test:database", "test:executor"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "an expired old owner cannot persist a result or overwrite the replacement owner"
+        },
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "the executor renews a real lease while provider work remains outside SQL and abandons on shutdown"
+        }
+      ],
+      "scope": "Database-time expiry/fencing and replacement completion; controlled expiry is labeled."
+    },
+    {
+      "id": "CLI-01",
+      "gates": ["test:cli", "test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/cli-smoke.mjs",
+          "contains": "Building CLI and starting the complete local workflow from empty volumes"
+        }
+      ],
+      "scope": "Containerized offline journey from empty volumes without a model key."
+    },
+    {
+      "id": "CLI-02",
+      "gates": ["check"],
+      "evidence": [
+        {
+          "path": "tests/cli.test.cjs",
+          "contains": "create retains one generated idempotency key after a lost acknowledgement"
+        },
+        {
+          "path": "tests/cli-transport.test.cjs",
+          "contains": "partial response loss retries a real POST with the original payload and key"
+        }
+      ],
+      "scope": "Generated stable retry key; actual HTTP partial-response loss."
+    },
+    {
+      "id": "CLI-03",
+      "gates": ["test:cli", "test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/cli-smoke.mjs",
+          "contains": "JSON.parse(value.stdout)"
+        }
+      ],
+      "scope": "Exactly one parseable final object; progress remains on stderr."
+    },
+    {
+      "id": "CLI-04",
+      "gates": ["check", "test:cli", "test:replay"],
+      "evidence": [
+        {
+          "path": "tests/cli.test.cjs",
+          "contains": "failed execution is observable through get but fails wait with exit 1"
+        },
+        {
+          "path": "tests/cli-transport.test.cjs",
+          "contains": "a real stalled body is cancelled by the overall deadline"
+        }
+      ],
+      "scope": "Distinct assertion/failure, transport and deadline exits, with real CLI checks."
+    },
+    {
+      "id": "SEC-01",
+      "gates": ["check", "test:database", "test:compose"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "credential/principal changes invalidate later authentication without a cache: %s"
+        },
+        {
+          "path": "tests/ticket-http.test.cjs",
+          "contains": "UNAUTHENTICATED"
+        }
+      ],
+      "scope": "Initial local HTTP/bearer authentication; no production identity-store claim."
+    },
+    {
+      "id": "SEC-02",
+      "gates": ["test:cli", "test:replay"],
+      "evidence": [
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "FORBIDDEN"
+        }
+      ],
+      "scope": "Readers/requesters cannot replay; readers cannot create; operators remain tenant-scoped."
+    },
+    {
+      "id": "SEC-03",
+      "gates": ["test:tracing"],
+      "evidence": [
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "harbor.operator"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "harbor.requester"
+        },
+        {
+          "path": "scripts/tracing-smoke.mjs",
+          "contains": "summit.reader"
+        }
+      ],
+      "scope": "Requester reads another same-tenant member ticket; foreign/missing reads match."
+    },
+    {
+      "id": "HTTP-06",
+      "gates": ["test:database", "test:replay"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-replay.test.cjs",
+          "contains": "concurrent"
+        }
+      ],
+      "scope": "Concurrent expected-generation replay serializes one winner."
+    },
+    {
+      "id": "HTTP-07",
+      "gates": ["test:database", "test:replay"],
+      "evidence": [
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "receipt"
+        }
+      ],
+      "scope": "Historical replay receipt remains stable after progress."
+    },
+    {
+      "id": "HTTP-08",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-submission.test.cjs",
+          "contains": "whitespace"
+        }
+      ],
+      "scope": "Canonical validated submission hashing preserves significant content."
+    },
+    {
+      "id": "EVENT-04",
+      "gates": ["test:database", "test:consumer"],
+      "evidence": [
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "quarantine"
+        }
+      ],
+      "scope": "Invalid envelopes/identity collisions never become executable work."
+    },
+    {
+      "id": "EVENT-05",
+      "gates": ["test:consumer"],
+      "evidence": [
+        {
+          "path": "scripts/consumer-smoke.mjs",
+          "contains": "consumer_sql_checkpoint"
+        }
+      ],
+      "scope": "Observed persistence-before-offset crash cannot skip an earlier record."
+    },
+    {
+      "id": "EVENT-06",
+      "gates": ["test:database", "test:replay"],
+      "evidence": [
+        {
+          "path": "tests/database/ticket-replay.test.cjs",
+          "contains": "an old event after a real replay is stale and cannot schedule the new generation"
+        }
+      ],
+      "scope": "Old-generation redelivery is fenced after replay."
+    },
+    {
+      "id": "DATA-05",
+      "gates": ["check", "test:database", "test:response-crash"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "attempts exhaust the stored budget without a fourth claim"
+        }
+      ],
+      "scope": "All claims/crashes consume the durable three-attempt budget."
+    },
+    {
+      "id": "DATA-06",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "a later completion write failure rolls back the result and every lifecycle change"
+        }
+      ],
+      "scope": "Completion is atomic across result/attempt/job/execution."
+    },
+    {
+      "id": "DATA-07",
+      "gates": ["test:database", "test:replay"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "generation changes fence an old live owner"
+        }
+      ],
+      "scope": "Replay/admission/old owner cannot change the new generation."
+    },
+    {
+      "id": "DATA-09",
+      "gates": ["test:database", "test:relay", "test:consumer"],
+      "evidence": [
+        {
+          "path": "tests/database/execution-ownership.test.cjs",
+          "contains": "lost terminal commit acknowledgement cannot create another failure notification"
+        }
+      ],
+      "scope": "Logical terminal notification identity survives retries/redelivery."
+    },
+    {
+      "id": "DATA-10",
+      "gates": ["test:database", "test:operations"],
+      "evidence": [
+        {
+          "path": "tests/database/delivery-repair.test.cjs",
+          "contains": "same-key retry resolves a lost repair COMMIT reply"
+        }
+      ],
+      "scope": "Ambiguous SQL replies resolve through durable identity, not new work."
+    },
+    {
+      "id": "CLI-05",
+      "gates": ["check", "test:replay"],
+      "evidence": [
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "FORBIDDEN"
+        }
+      ],
+      "scope": "Nonoperators cannot replay; selected identity remains tenant scoped."
+    },
+    {
+      "id": "CLI-06",
+      "gates": [
+        "check",
+        "test:cli",
+        "test:relay",
+        "test:consumer",
+        "test:response-crash"
+      ],
+      "evidence": [
+        {
+          "path": "tests/cli.test.cjs",
+          "contains": "API-only CLI cannot certify host scenario"
+        }
+      ],
+      "scope": "Host runner requires observed checkpoints and a successful complete harness; API CLI refuses host certification."
+    },
+    {
+      "id": "REC-01",
+      "gates": ["test:relay"],
+      "evidence": [
+        {
+          "path": "scripts/relay-smoke.mjs",
+          "contains": "Broker outage retained pending work and restart delivered it"
+        }
+      ],
+      "scope": "Actual broker outage and outbox/lease recovery."
+    },
+    {
+      "id": "REC-02",
+      "gates": ["test:response-crash", "test:executor"],
+      "evidence": [
+        {
+          "path": "scripts/response-crash-smoke.mjs",
+          "contains": "staleCompletionRejected: true"
+        }
+      ],
+      "scope": "Observe response-before-persistence, kill, real lease expiry, repeat provider call and one result."
+    },
+    {
+      "id": "REC-03",
+      "gates": ["test:database", "test:replay"],
+      "evidence": [
+        {
+          "path": "scripts/replay-smoke.mjs",
+          "contains": "generation"
+        }
+      ],
+      "scope": "Role/generation-gated replay preserves prior history and traverses Kafka."
+    },
+    {
+      "id": "REC-04",
+      "gates": ["test:database", "test:operations"],
+      "evidence": [
+        {
+          "path": "tests/database/delivery-repair.test.cjs",
+          "contains": "canonical same-generation repair commits one event"
+        }
+      ],
+      "scope": "Canonical repair is atomic, audited, scoped and idempotent."
+    },
+    {
+      "id": "REC-05",
+      "gates": ["test:database", "test:operations"],
+      "evidence": [
+        {
+          "path": "tests/database/delivery-repair.test.cjs",
+          "contains": "old-first"
+        }
+      ],
+      "scope": "Both late event orders retain one job and actual source-event failure causation."
+    },
+    {
+      "id": "REC-06",
+      "gates": ["test:database", "test:operations"],
+      "evidence": [
+        {
+          "path": "scripts/operations-smoke.mjs",
+          "contains": "PROJECT_CONFLICT"
+        }
+      ],
+      "scope": "Project/directory, plan hash, immutable environment, generation/event/source digest are revalidated."
+    },
+    {
+      "id": "OBS-01",
+      "gates": ["test:tracing", "test:observability"],
+      "evidence": [
+        {
+          "path": "scripts/observability-smoke.mjs",
+          "contains": "Jaeger stores the actual detached trace"
+        }
+      ],
+      "scope": "Seven real stages in Jaeger, explicit durable parents across restarted workers."
+    },
+    {
+      "id": "OBS-02",
+      "gates": ["check", "test:observability"],
+      "evidence": [
+        {
+          "path": "tests/telemetry.test.cjs",
+          "contains": "a stalled exporter has bounded storage"
+        }
+      ],
+      "scope": "One in-flight request, fixed queue, bounded shutdown and ticket completion during Collector loss."
+    },
+    {
+      "id": "OBS-03",
+      "gates": ["test:database", "test:observability"],
+      "evidence": [
+        {
+          "path": "scripts/observability-smoke.mjs",
+          "contains": "Unbounded or sensitive metric label"
+        }
+      ],
+      "scope": "Persisted backlog/attempt/quarantine aggregates and bounded stage/error/drop instruments in Prometheus."
+    },
+    {
+      "id": "OBS-04",
+      "gates": ["check", "test:observability"],
+      "evidence": [
+        {
+          "path": "scripts/observability-smoke.mjs",
+          "contains": "secretCheck"
+        }
+      ],
+      "scope": "No private fixture/credential in captured logs or actual exported spans."
+    },
+    {
+      "id": "AI-01",
+      "gates": ["check", "test:database", "evaluate:retrieval"],
+      "evidence": [
+        {
+          "path": "tests/knowledge.test.cjs",
+          "contains": "chunking normalizes LF deterministically"
+        }
+      ],
+      "scope": "Deterministic LF/UTF-8 chunking, immutable source digests and the declared 128-dimensional lexical hash."
+    },
+    {
+      "id": "AI-02",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "corpus seed is repeatable and immutable versions cannot be overwritten"
+        }
+      ],
+      "scope": "Changed bytes under an immutable version or snapshot fail atomically."
+    },
+    {
+      "id": "AI-03",
+      "gates": ["test:database", "test:rag"],
+      "evidence": [
+        {
+          "path": "scripts/rag-smoke.mjs",
+          "contains": "tenantIsolation: true"
+        }
+      ],
+      "scope": "Tenant/snapshot filtering before context, scoped attempt evidence and own-tenant citations/answers. Tool execution remains phase 5."
+    },
+    {
+      "id": "AI-04",
+      "gates": ["check", "test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "cached identical queries remain scoped"
+        }
+      ],
+      "scope": "Bounded immutable snapshot cache includes tenant/profile/policy/query identity and returns defensive copies."
+    },
+    {
+      "id": "AI-07",
+      "gates": ["test:database", "test:rag"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "retries retain pinned context while operator replay records the new active snapshot"
+        }
+      ],
+      "scope": "New acceptance pins configuration atomically; retries preserve it and replay records the newly selected snapshot. Legacy jobs retain abstention mode."
+    },
+    {
+      "id": "RESULT-01",
+      "gates": ["check", "test:database", "test:rag"],
+      "evidence": [
+        {
+          "path": "scripts/rag-smoke.mjs",
+          "contains": "abstained.ticket.result.outcome, 'insufficient_evidence'"
+        }
+      ],
+      "scope": "Unsupported questions complete with explicit abstention and no citations."
+    },
+    {
+      "id": "DATA-08",
+      "gates": ["test:database", "test:rag"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "DELETE FROM lab.document_versions"
+        }
+      ],
+      "scope": "Citations refer to actually delivered attempt evidence, pinned snapshot membership and immutable versions. Referenced data cannot disappear."
+    },
+    {
+      "id": "SEC-04",
+      "gates": ["check", "test:database", "test:rag"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "execution context cannot be loaded through another tenant or attempt token"
+        }
+      ],
+      "scope": "HTTP tenant fields cannot select corpus identity; internal context requires the server-owned live job/attempt identity."
+    },
+    {
+      "id": "SEC-05",
+      "gates": ["check", "test:database"],
+      "evidence": [
+        {
+          "path": "tests/knowledge.test.cjs",
+          "contains": "cache identity includes tenant, snapshot, profile, query and policy independently"
+        }
+      ],
+      "scope": "Identical queries cannot cross cache scope and returned objects cannot mutate stored evidence."
+    },
+    {
+      "id": "SEC-14",
+      "gates": ["test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "runtime roles cannot change immutable corpus rows or active pointers"
+        }
+      ],
+      "scope": "Runtime column/role permissions preserve immutable corpus, pointers, credentials and lifecycle boundaries. Worker question read is required for scoped execution; roles remain trusted modules without tenant RLS."
+    },
+    {
+      "id": "AI-05",
+      "gates": ["check", "test:database", "evaluate:workflow"],
+      "evidence": [
+        {
+          "path": "tests/bounded-agent.test.cjs",
+          "contains": "an answer can cite only the evidence delivered in this run"
+        }
+      ],
+      "scope": "Strict tool/final validation rejects forbidden names, extra authority and fabricated citations before persistence."
+    },
+    {
+      "id": "AI-06",
+      "gates": ["check", "evaluate:workflow"],
+      "evidence": [
+        {
+          "path": "tests/bounded-agent.test.cjs",
+          "contains": "a fourth tool request fails without starting its dependency"
+        }
+      ],
+      "scope": "Zero-evidence abstention and finite serial budgets/deadlines stop additional calls."
+    },
+    {
+      "id": "AI-08",
+      "gates": ["check", "evaluate:workflow"],
+      "evidence": [
+        {
+          "path": "tests/bounded-agent.test.cjs",
+          "contains": "a real-provider adapter cannot accidentally enter the simulated workflow path"
+        }
+      ],
+      "scope": "Workflow reports are explicitly scripted and do not establish real-model semantic quality."
+    },
+    {
+      "id": "SEC-06",
+      "gates": ["check", "evaluate:workflow"],
+      "evidence": [
+        {
+          "path": "tests/bounded-agent.test.cjs",
+          "contains": "malicious documentation remains data and cannot add tools or change authority"
+        }
+      ],
+      "scope": "Document instructions cannot add tools, tenant authority or outbound capabilities."
+    },
+    {
+      "id": "SEC-07",
+      "gates": ["check", "evaluate:workflow"],
+      "evidence": [
+        {
+          "path": "tests/bounded-agent.test.cjs",
+          "contains": "a search tool rejects an over-8-KiB result without silently truncating it"
+        }
+      ],
+      "scope": "Unknown tools, extra arguments, URLs and oversized results fail closed."
+    },
+    {
+      "id": "SEC-08",
+      "gates": ["check", "test:rag"],
+      "evidence": [
+        {
+          "path": "tests/agent-provider.test.cjs",
+          "contains": "provider exceptions and fake secrets never enter safe errors or model/tool telemetry"
+        }
+      ],
+      "scope": "Provider exceptions and request data stay out of errors and default traces; actual RAG logs exclude corpus and credentials."
+    },
+    {
+      "id": "SEC-09",
+      "gates": ["check", "test:database"],
+      "evidence": [
+        {
+          "path": "tests/database/knowledge.test.cjs",
+          "contains": "the bounded offline agent uses real scoped retrieval and lifecycle tools after credential revocation"
+        }
+      ],
+      "scope": "Accepted work retains scoped system capability after requester revocation; HTTP credential checks remain mandatory."
+    }
+  ],
+  "traceCorrelation": {
+    "gates": [
+      "check",
+      "test:database",
+      "test:tracing",
+      "test:observability",
+      "test:rag"
+    ],
+    "evidence": [
+      {
+        "path": "scripts/tracing-smoke.mjs",
+        "contains": "publication.parentSpanId, transaction.spanId"
+      },
+      {
+        "path": "tests/telemetry.test.cjs",
+        "contains": "stdout backpressure drops telemetry"
+      },
+      {
+        "path": "scripts/rag-smoke.mjs",
+        "contains": "r.stage === 'model.decide'"
+      }
+    ],
+    "scope": "Existing workflow chain plus content-free model, tool and initial/tool retrieval spans under the actual execution trace."
+  }
+}

@@ -45,5 +45,10 @@
     "prettier": "3.10.1",
     "typescript": "6.0.3",
     "@testcontainers/postgresql": "12.2.1"
+  },
+  "overrides": {
+    "node-pg-migrate": {
+      "glob": "14.0.2"
+    }
   }
 }

@@ -53,6 +53,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* \
 ENV NODE_ENV=production APP_MODE=local
 WORKDIR /app
 COPY LICENSE NOTICE ./
+COPY third-party/licenses ./third-party/licenses
 USER node
 
 FROM runtime AS api

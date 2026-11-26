@@ -2,6 +2,9 @@
 **
 !LICENSE
 !NOTICE
+!third-party/
+!third-party/licenses/
+!third-party/licenses/**
 !package.json
 !package-lock.json
 !tsconfig.base.json

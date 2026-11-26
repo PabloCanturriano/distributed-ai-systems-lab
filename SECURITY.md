@@ -10,7 +10,7 @@ The controls, implementation scope and trust boundaries are in the [security des
 
 Do not post credentials, private data, or exploit details in a public issue. Use the repository's private vulnerability-reporting feature if it is enabled. Otherwise, use a private contact explicitly published by the owner. If neither is available, open an issue requesting a private reporting channel without sensitive details.
 
-A dedicated private channel and response expectations must be established before the first working public release. This policy does not invent a contact address or promise an unstaffed response SLA.
+The owner selected GitHub private vulnerability reporting for the public evaluation release and will receive and triage reports. It must be enabled and checked before publication; this document does not assert that the setting is enabled while the repository remains private. No response deadline or security-supported production version is promised.
 
 ## Secrets and dependencies
 

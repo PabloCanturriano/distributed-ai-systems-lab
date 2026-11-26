@@ -5,7 +5,7 @@ const require = createRequire('/app/apps/worker/package.json');
 const { Pool } = require('pg');
 const { ExecutionOwnership } = require('./dist/execution-ownership.js');
 const { JobExecutor } = require('./dist/job-executor.js');
-const { SimulatedAbstentionProvider } = require('./dist/simulated-provider.js');
+const { AgentProvider } = require('./dist/agent-provider.js');
 const mode = process.argv[1];
 if (!['hold-response', 'recover'].includes(mode))
   throw Error('Invalid fixture');
@@ -20,7 +20,10 @@ const pool = new Pool({
 });
 pool.on('error', () => {});
 const ownership = new ExecutionOwnership(pool),
-  provider = new SimulatedAbstentionProvider();
+  provider = new AgentProvider(
+    pool,
+    JSON.parse(readFileSync('fixtures/knowledge/services-v1.json', 'utf8')),
+  );
 const store = {
   claim: () => ownership.claim(),
   renew: (...args) => ownership.renew(...args),
@@ -33,6 +36,7 @@ const store = {
           checkpoint: 'response-before-persistence',
           jobId: args[0],
           attemptId: args[1],
+          evidenceCount: args[2].agent.evidence.length,
         }),
       );
       await new Promise(() => {});

@@ -96,7 +96,17 @@ function assertResult(body) {
     outcome: 'insufficient_evidence',
     answer: expectedAnswer,
     citations: [],
-    execution: { providerMode: 'simulated', attemptCount: 1, toolCalls: [] },
+    execution: {
+      providerMode: 'simulated',
+      attemptCount: 1,
+      policy: 'bounded-agent-v1',
+      modelTurns: 4,
+      toolCalls: [
+        { name: 'search_documentation', outcome: 'observed' },
+        { name: 'get_ticket', outcome: 'observed' },
+        { name: 'get_service_status', outcome: 'observed' },
+      ],
+    },
   });
   assert.equal(body.failure, null);
 }

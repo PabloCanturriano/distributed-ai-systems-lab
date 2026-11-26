@@ -95,7 +95,7 @@ try {
     'ticket',
     'create',
     '--message',
-    'crash-private-question-fixture',
+    'retry policy',
     '--key',
     randomUUID(),
   ]);
@@ -145,6 +145,7 @@ try {
     )[0].n,
     0,
   );
+  assert(checkpoint.evidenceCount > 0);
   await docker(['kill', '--signal', 'KILL', actorName]);
   const before = (
     await query(
@@ -173,7 +174,21 @@ try {
     ),
   );
   assert(recovered.stdout.includes('executor_completed'));
-  assert.equal((await cli(['ticket', 'get', id])).ticket.status, 'completed');
+  const terminal = (await cli(['ticket', 'get', id])).ticket;
+  assert.equal(terminal.status, 'completed');
+  assert.equal(terminal.result.outcome, 'answered');
+  assert.equal(terminal.result.citations.length, 1);
+  assert.equal(terminal.result.execution.policy, 'bounded-agent-v1');
+  assert.equal(terminal.result.execution.toolCalls.length, 3);
+  assert.equal(
+    (
+      await query(
+        'SELECT count(*)::int AS n FROM lab.execution_evidence WHERE ticket_id=$1 AND attempt_id=$2',
+        [id, checkpoint.attemptId],
+      )
+    )[0].n,
+    0,
+  );
   const attempts = await query(
     'SELECT status FROM lab.execution_attempts WHERE job_id=$1 ORDER BY attempt_number',
     [checkpoint.jobId],

@@ -1,13 +1,11 @@
 import { localTelemetry } from '@lab/telemetry';
 import { loadExecutorConfiguration } from '@lab/configuration';
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { readFile, open } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { ExecutionOwnership } from './execution-ownership';
 import { JobExecutor } from './job-executor';
-import { EvidenceProvider } from './evidence-provider';
-import { ExecutionEvidence } from './execution-evidence';
-import { KnowledgeRetrieval } from './knowledge-retrieval';
+import { AgentProvider } from './agent-provider';
 
 const controller = new AbortController();
 const report = (event: string) => console.log(JSON.stringify({ event }));
@@ -71,9 +69,11 @@ async function main() {
     report('executor_started');
     await new JobExecutor(
       new ExecutionOwnership(pool, telemetry),
-      new EvidenceProvider(
-        new ExecutionEvidence(pool),
-        new KnowledgeRetrieval(pool),
+      new AgentProvider(
+        pool,
+        JSON.parse(
+          await readFile('fixtures/knowledge/services-v1.json', 'utf8'),
+        ),
         telemetry,
       ),
       report,

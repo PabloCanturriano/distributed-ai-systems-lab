@@ -79,6 +79,7 @@ COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 CMD ["node", "apps/worker/dist/main.js"]
 
 FROM worker AS executor
+COPY fixtures/knowledge/services-v1.json ./fixtures/knowledge/services-v1.json
 CMD ["node", "apps/worker/dist/executor-main.js"]
 
 FROM worker AS relay

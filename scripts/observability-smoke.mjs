@@ -59,6 +59,21 @@ async function cli(args, exit = 0) {
     );
     assert.equal(exit, 0);
   } catch (e) {
+    if (e.code !== exit) {
+      let code = 'UNPARSEABLE_RESPONSE';
+      try {
+        const value = JSON.parse(e.stdout);
+        if (/^[A-Z_]{1,64}$/.test(value.error?.code)) code = value.error.code;
+      } catch {}
+      console.error(
+        JSON.stringify({
+          event: 'observability_cli_failed',
+          command: args.slice(0, 2).join(' '),
+          exit: e.code,
+          code,
+        }),
+      );
+    }
     assert.equal(e.code, exit);
     r = e;
   }
@@ -497,6 +512,30 @@ try {
       ],
     }),
   );
+} catch (error) {
+  const services = {};
+  for (const name of ['api', 'relay', 'consumer', 'executor']) {
+    try {
+      const c = await inspect(name);
+      services[name] = {
+        status: c.State.Status,
+        exitCode: c.State.ExitCode,
+        oomKilled: c.State.OOMKilled,
+      };
+    } catch {
+      services[name] = { status: 'inspection_failed' };
+    }
+  }
+  let jobs = [];
+  try {
+    jobs = await query(
+      'SELECT status,attempt_count,failure_code FROM lab.execution_jobs ORDER BY status',
+    );
+  } catch {}
+  console.error(
+    JSON.stringify({ event: 'observability_failure_state', services, jobs }),
+  );
+  throw error;
 } finally {
   await compose(
     ['down', '--volumes', '--remove-orphans', '--rmi', 'local'],

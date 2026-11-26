@@ -178,7 +178,8 @@ try {
   assert.equal(finished.ticket.result.execution.providerMode, 'simulated');
   assert.equal(finished.ticket.result.outcome, 'insufficient_evidence');
   assert.deepEqual(finished.ticket.result.citations, []);
-  assert.deepEqual(finished.ticket.result.execution.toolCalls, []);
+  assert.equal(finished.ticket.result.execution.policy, 'bounded-agent-v1');
+  assert.equal(finished.ticket.result.execution.toolCalls.length, 3);
   const demo = await cli(
     ['demo', '--identity', 'summit.requester', '--json'],
     0,

@@ -130,7 +130,13 @@ try {
     assert.equal(r.ticket.status, 'completed');
     assert.equal(r.ticket.result.outcome, 'answered');
     assert.equal(r.ticket.result.execution.providerMode, 'simulated');
-    assert.deepEqual(r.ticket.result.execution.toolCalls, []);
+    assert.equal(r.ticket.result.execution.policy, 'bounded-agent-v1');
+    assert.equal(r.ticket.result.execution.modelTurns, 4);
+    assert.deepEqual(r.ticket.result.execution.toolCalls, [
+      { name: 'search_documentation', outcome: 'observed' },
+      { name: 'get_ticket', outcome: 'observed' },
+      { name: 'get_service_status', outcome: 'observed' },
+    ]);
     assert.equal(r.ticket.result.citations.length, 1);
   }
   assert(harbor.ticket.result.answer.includes('HARBOR_PRIVATE_RETRY_V1'));
@@ -180,6 +186,14 @@ try {
     )
   )[0].n;
   assert.equal(valid, 2);
+  assert.equal(
+    (
+      await query(
+        "SELECT count(*)::int AS n FROM lab.execution_results r JOIN lab.execution_configurations x USING(tenant_id,ticket_id,generation) WHERE x.policy_version='bounded-agent-v1' AND r.agent_summary->>'policy'='bounded-agent-v1'",
+      )
+    )[0].n,
+    3,
+  );
   const logs = await compose([
     'logs',
     '--no-color',
@@ -212,7 +226,20 @@ try {
         r.stage === 'retrieval.search' &&
         r.ticketId === accepted.ticket.ticketId,
     );
+  const decisions = records.filter(
+    (r) =>
+      r.stage === 'model.decide' && r.ticketId === accepted.ticket.ticketId,
+  );
+  const tools = records.filter(
+    (r) => r.stage === 'tool.run' && r.ticketId === accepted.ticket.ticketId,
+  );
+  assert.equal(decisions.length, 4);
+  assert.equal(tools.length, 3);
   assert(execution);
+  for (const span of [...decisions, ...tools]) {
+    assert.equal(span.traceId, execution.traceId);
+    assert.equal(span.parentSpanId, execution.spanId);
+  }
   assert(retrieval);
   assert.equal(retrieval.parentSpanId, execution.spanId);
   assert.equal(retrieval.traceId, accepted.acceptedTraceId);
@@ -221,7 +248,7 @@ try {
   await actor('seed', secretCheck, [], text + captured.join('\n'));
   console.log(
     JSON.stringify({
-      scenario: 'phase4.rag',
+      scenario: 'phase5.agent-rag',
       status: 'passed',
       answered: 2,
       abstained: 1,

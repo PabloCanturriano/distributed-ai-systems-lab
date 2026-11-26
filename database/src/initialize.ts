@@ -104,6 +104,7 @@ async function main(): Promise<void> {
       const knowledge = await seedKnowledge(
         client,
         JSON.parse(await readFile('fixtures/knowledge/corpus-v1.json', 'utf8')),
+        'bounded-agent-v1',
       );
       console.log(
         JSON.stringify({ event: 'knowledge_complete', ...knowledge }),

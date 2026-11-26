@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const exec = promisify(execFile),
   project = `lab-observability-${process.pid}-${Date.now()}`,
   env = {
@@ -50,6 +53,7 @@ const actor = (service, code, args = [], input) =>
     40000,
     input,
   );
+const dnsFixture = mkdtempSync(join(tmpdir(), 'lab-collector-dns-'));
 async function cli(args, exit = 0) {
   let r;
   try {
@@ -119,6 +123,42 @@ async function spans() {
   });
 }
 try {
+  // A fresh internal alias prevents prior negative DNS caching from masking
+  // shared resolver starvation after the collector stops. Application code and
+  // business timeouts are unchanged; only the same collector's test DNS name moves.
+  const alias = 'collector-cold-' + randomUUID().replaceAll('-', '');
+  const preload = join(dnsFixture, 'preload.cjs');
+  writeFileSync(
+    preload,
+    `
+    const dns = require('node:dns');
+    const lookup = dns.lookup;
+    dns.lookup = function(host, ...args) { if(host === 'collector') console.warn(JSON.stringify({event:'collector_dns_fixture_lookup'})); return lookup.call(dns, host === 'collector' ? '${alias}' : host, ...args); };
+    const resolve4 = dns.Resolver.prototype.resolve4;
+    dns.Resolver.prototype.resolve4 = function(host, ...args) { if(host === 'collector') console.warn(JSON.stringify({event:'collector_dns_fixture_lookup'})); return resolve4.call(this, host === 'collector' ? '${alias}' : host, ...args); };
+  `,
+    { mode: 0o444 },
+  );
+  const services = {
+    collector: { networks: { backend: { aliases: [alias] } } },
+  };
+  for (const service of ['api', 'worker', 'relay', 'consumer', 'executor'])
+    services[service] = {
+      environment: {
+        NODE_OPTIONS: '--require=/run/lab/collector-dns-fixture.cjs',
+      },
+      volumes: [
+        {
+          type: 'bind',
+          source: preload,
+          target: '/run/lab/collector-dns-fixture.cjs',
+          read_only: true,
+        },
+      ],
+    };
+  const override = join(dnsFixture, 'compose.json');
+  writeFileSync(override, JSON.stringify({ services }));
+  prefix.push('--file', override);
   console.log(
     'Starting real OTLP, Jaeger and Prometheus acceptance from empty volumes',
   );
@@ -468,6 +508,12 @@ try {
     ),
   );
   const finalLogs = await compose(['logs', '--no-color']);
+  assert(
+    (finalLogs.stdout + finalLogs.stderr).includes(
+      '"event":"collector_dns_fixture_lookup"',
+    ),
+    'The cold collector DNS fixture must actually be exercised',
+  );
   const disclosureEvidence =
     text +
     finalLogs.stdout +
@@ -537,8 +583,12 @@ try {
   );
   throw error;
 } finally {
-  await compose(
-    ['down', '--volumes', '--remove-orphans', '--rmi', 'local'],
-    90000,
-  );
+  try {
+    await compose(
+      ['down', '--volumes', '--remove-orphans', '--rmi', 'local'],
+      90000,
+    );
+  } finally {
+    rmSync(dnsFixture, { recursive: true, force: true });
+  }
 }

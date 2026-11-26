@@ -6,7 +6,9 @@ import {
   type PushMetricExporter,
 } from '@opentelemetry/sdk-metrics';
 import { boundedProcessor } from './export';
+import { createCollectorLookup } from './collector-dns';
 export { boundedProcessor } from './export';
+export { createCollectorLookup } from './collector-dns';
 import type { Writable } from 'node:stream';
 import { ROOT_CONTEXT, trace, SpanKind, type Span } from '@opentelemetry/api';
 import {
@@ -166,6 +168,7 @@ export function createTelemetry(
       ? process.env.APP_REVISION!
       : 'workspace',
   });
+  const collectorLookup = createCollectorLookup();
   const remote =
     mode === 'otlp'
       ? boundedProcessor(
@@ -173,6 +176,7 @@ export function createTelemetry(
             url: 'http://collector:4318/v1/traces',
             timeoutMillis: 750,
             concurrencyLimit: 1,
+            httpAgentOptions: { lookup: collectorLookup },
           }),
         )
       : undefined;
@@ -182,6 +186,7 @@ export function createTelemetry(
           url: 'http://collector:4318/v1/metrics',
           timeoutMillis: 750,
           concurrencyLimit: 1,
+          httpAgentOptions: { lookup: collectorLookup },
         })
       : undefined;
   const measuredExporter: PushMetricExporter | undefined = metricExporter

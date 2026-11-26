@@ -1,13 +1,28 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { snapshotSource, implementationDigest } from './reviewer-snapshot.mjs';
-if (process.argv.length !== 2)
-  throw Error('No quickstart arguments are supported');
+import { releaseImageOverrides } from './release-policy.mjs';
+const [option, manifestFile, ...extra] = process.argv.slice(2);
+if (
+  (option && (option !== '--images' || !manifestFile)) ||
+  (!option && manifestFile) ||
+  extra.length
+)
+  throw Error('Use no arguments or --images <published-manifest.json>');
+const published = manifestFile
+  ? JSON.parse(readFileSync(manifestFile, 'utf8'))
+  : null;
 const root = process.cwd(),
   temporary = mkdtempSync(join(tmpdir(), 'lab-reviewer-')),
   source = join(temporary, 'source');
@@ -95,6 +110,19 @@ async function sample(checkpoint) {
 }
 try {
   report.source = snapshotSource(root, source);
+  if (published) {
+    const override = releaseImageOverrides(
+      published,
+      report.source.baseRevision,
+    );
+    writeFileSync(
+      join(source, 'release-images.json'),
+      JSON.stringify(override),
+    );
+    composePrefix.push('--file', 'release-images.json');
+    report.category = 'published-image-quickstart';
+    report.publishedImages = published.images;
+  }
   stage = 'engine';
   report.docker = JSON.parse(
     (
@@ -111,13 +139,25 @@ try {
   stage = 'build';
   started = true;
   const buildStart = performance.now();
-  await compose(['build', 'cli'], 240000);
+  if (published) {
+    for (const image of published.images)
+      await docker(['pull', image.ref], 240000);
+    // Only the tiny source-controlled broker bootstrap remains source-built.
+    await compose(['build', 'kafka-init'], 240000);
+  } else await compose(['build', 'cli'], 240000);
   report.cliBuildMs = Math.round(performance.now() - buildStart);
   stage = 'startup';
   const start = performance.now();
   started = true;
   await compose(
-    ['up', '--build', '--detach', '--wait', '--wait-timeout', '180'],
+    [
+      'up',
+      published ? '--no-build' : '--build',
+      '--detach',
+      '--wait',
+      '--wait-timeout',
+      '180',
+    ],
     360000,
   );
   report.startupMs = Math.round(performance.now() - start);

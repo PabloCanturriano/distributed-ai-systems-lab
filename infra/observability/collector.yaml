@@ -27,8 +27,8 @@ exporters:
       max_elapsed_time: 5s
   prometheus:
     endpoint: 0.0.0.0:8889
-    resource_to_telemetry_conversion:
-      enabled: true
+    resource_constant_labels:
+      included: [service.name, worker.role, provider.mode, service.version]
 service:
   telemetry:
     logs:

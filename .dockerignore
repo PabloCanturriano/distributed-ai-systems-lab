@@ -1,5 +1,7 @@
 # Only explicit build inputs enter the context. Host caches, secrets, and Git stay out.
 **
+!LICENSE
+!NOTICE
 !package.json
 !package-lock.json
 !tsconfig.base.json

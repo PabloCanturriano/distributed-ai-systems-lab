@@ -60,7 +60,7 @@ The local journey above uses fictional seed data and a CLI demonstration without
 
 A deterministic simulated provider currently supports repeatable workflow tests. An optional real-model integration will have separate quality evaluations; simulated results will not be presented as evidence of model quality.
 
-The [Compose foundation commands](docs/operations/compose-foundation.md) verify initialization and process lifecycle. The CLI commands above demonstrate the complete simulated workflow; release-level prerequisites and measurements remain future work.
+The [Compose foundation commands](docs/operations/compose-foundation.md) verify initialization and process lifecycle. The CLI commands above demonstrate the complete simulated workflow. The [source-built reviewer journey and measured limits](docs/release/reviewer-quickstart.md) are verified separately; packaged publication remains subject to the release gates.
 
 ## Delivery sequence
 
@@ -79,13 +79,17 @@ The initial release focuses on local execution and backend behavior. It excludes
 
 Start with the [architecture overview](docs/architecture/overview.md), [HTTP/event contracts](docs/architecture/contracts.md), and [execution decision record](docs/adr/0001-durable-ai-execution.md). The [documentation map](docs/README.md) links the data model, security design, CLI, AI limitations, tests, and runbooks.
 
-The [roadmap](docs/roadmap.md) defines delivery phases and acceptance gates. The [review checklist](docs/architecture/review.md) makes the implementation approval boundary explicit. The [phase-2 gate](docs/quality/phase2.md) now verifies the complete simulated workflow and its required failure/concurrency boundaries; the closure patch is pending owner review.
+The [roadmap](docs/roadmap.md) defines delivery phases and acceptance gates. The [review checklist](docs/architecture/review.md) makes the implementation approval boundary explicit. The [phase-2 gate](docs/quality/phase2.md) now verifies the complete simulated workflow and its required failure/concurrency boundaries; its closure is published.
 
 ## Current limitations
 
 The intended default combines a scripted model with lexical vector retrieval; it is not a semantic-model benchmark. Real-provider evaluation is optional and separate. The local deployment trusts the host operator and does not provide production high availability, hosted identity, or a public deployment.
 
 See the [security policy](SECURITY.md) before reporting a concern. There is no supported application release yet.
+
+## License
+
+Project source is licensed under [Apache-2.0](LICENSE). Third-party components retain their [own terms and notices](THIRD_PARTY_NOTICES.md). No security-supported release is advertised.
 
 ## Contributing
 

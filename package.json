@@ -52,5 +52,6 @@
     "node-pg-migrate": {
       "glob": "14.0.2"
     }
-  }
+  },
+  "license": "Apache-2.0"
 }

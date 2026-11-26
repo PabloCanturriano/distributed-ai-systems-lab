@@ -52,6 +52,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* \
     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 ENV NODE_ENV=production APP_MODE=local
 WORKDIR /app
+COPY LICENSE NOTICE ./
 USER node
 
 FROM runtime AS api

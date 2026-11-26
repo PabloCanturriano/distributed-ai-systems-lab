@@ -120,6 +120,8 @@ try {
       const fs = require('node:fs');
       assert.ok(process.getuid() > 0);
       require('@lab/configuration');
+      assert.match(fs.readFileSync('/app/LICENSE', 'utf8'), /Apache License/);
+      assert.match(fs.readFileSync('/app/NOTICE', 'utf8'), /distributed-ai-systems-lab/);
       for (const path of ['/usr/local/lib/node_modules/npm', '/usr/local/bin/npm', '/usr/local/bin/npx', '/usr/local/bin/yarn', '/usr/local/bin/yarnpkg']) {
         assert.equal(fs.existsSync(path), false, path + ' must be absent from runtime');
       }

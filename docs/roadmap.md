@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phases 2–5 are published through `c3b304c`. Phase five passed its complete local [seventeen-control acceptance](quality/phase5.md), covering 59 criteria; hosted CI is tracked separately. [Phase six](quality/phase6.md) is in progress with HTTP contract export, dependency triage and an isolated reviewer journey. Owner-selected license/reporting/publication policies and remaining release controls are still pending.
+Status: phases 2–5 are published through `c3b304c`. Phase five passed its complete local [seventeen-control acceptance](quality/phase5.md), covering 59 criteria; hosted CI is tracked separately. [Phase six](quality/phase6.md) is in progress with HTTP contract export, dependency triage and an isolated reviewer journey. Apache-2.0, GitHub private reporting and GitHub Releases/GHCR are selected; exact implementation review, remaining security/legal controls and actual publication are still pending.
 
 ## Phase 0: architecture review
 

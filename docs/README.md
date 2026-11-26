@@ -1,6 +1,6 @@
 # Documentation map
 
-The published repository includes phases 2–5 through `c3b304c`. Phase-five local acceptance passed seventeen controls and 59 criteria, including bounded offline tools and durable safe summaries. [Phase-six readiness](quality/phase6.md) records the current contract/quickstart/dependency preparation and outstanding release decisions. Start with the [Docker-only reviewer journey](release/reviewer-quickstart.md); inspect [license/reporting options](release/policy-options.md) before selecting publication policies.
+The published repository includes phases 2–5 through `c3b304c`. Phase-five local acceptance passed seventeen controls and 59 criteria, including bounded offline tools and durable safe summaries. [Phase-six readiness](quality/phase6.md) records the current contract/quickstart/dependency preparation and remaining release gates. Start with the [Docker-only reviewer journey](release/reviewer-quickstart.md); inspect the [selected policies](release/policy-options.md), [third-party notice scope](../THIRD_PARTY_NOTICES.md), and [prepared publication procedure](release/publication.md).
 
 ## Read in this order
 

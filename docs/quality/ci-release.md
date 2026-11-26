@@ -24,7 +24,7 @@ The quickstart driver uses built-ins, Git and Docker to archive candidate source
 
 ## Remaining release work
 
-[Phase-six readiness](phase6.md) records all outstanding items. Required before a working public release: classify OBS-CLI-01, resolve or justify the [measured image findings](../release/security-inventory.md) and complete license/NOTICE review, select the maintained private reporting channel and repository license, define registry destination/release identity, produce immutable image digests and sanitized release manifests, and prove the advertised source-built and published-image paths.
+[Phase-six readiness](phase6.md) records all outstanding items. Required before a working public release: commit and validate the prepared OBS-CLI-01 DNS remediation on hosted runners, resolve or justify the [measured image findings](../release/security-inventory.md) and complete license/NOTICE review, enable the selected private reporting channel and finish the selected license/NOTICE package, define registry destination/release identity, produce immutable image digests and sanitized release manifests, and prove the advertised source-built and published-image paths.
 
 Publication is an explicit owner-authorized action. Untrusted branch code must not receive write tokens, registry secrets or model credentials; do not execute it through privileged target-context workflows. Any future pipeline must keep pinned inputs, minimal permissions, bounded jobs and scoped artifact retention. Upload no credential volumes, environment dumps, private prompts, database snapshots or raw sensitive logs.
 

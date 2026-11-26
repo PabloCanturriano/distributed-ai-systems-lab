@@ -1,6 +1,6 @@
 # Phase-six image and secret audit
 
-Status: measured on 2026-11-26 against published source `a3da5c09fc3e473432df67beb2488035d97e13f6`. This audit is not a release approval. The subsequent runtime-tooling patch below is uncommitted and awaits exact-patch approval.
+Status: measured on 2026-11-26 against published source `a3da5c09fc3e473432df67beb2488035d97e13f6`. This audit is not a release approval. The subsequent runtime-tooling patch below was approved and committed locally as `557b471`. Later DNS, licensing and release implementation is prepared separately in [review 0028](../quality/reviews/0028-release-policy-and-dns-isolation.md).
 
 ## Method and evidence
 
@@ -53,11 +53,11 @@ All baseline Node application images have the same 269 records: 250 Debian recor
 - PostgreSQL/pgvector, Kafka/bootstrap, Redis, Jaeger, Prometheus and the collector still have findings. Critical record names across the baseline include zlib, Go stdlib, SQLite, brotli and libxml2. Apart from the bounded zlib check above, full vendor/reachability triage and candidate pinned-image upgrades remain pending. Non-root execution and private networks do not establish non-exploitability.
 - The license pass inventories detected files/package licenses, including unknown classifications and copyleft categories. It does not judge compliance, select the owner's license or produce a complete redistribution NOTICE bundle. The collector's zero detected license records despite 1,089 recognized packages is a coverage limitation, not a license-free declaration. Static native addon dependencies, Go notices and distribution-specific obligations need explicit review.
 
-## Proposed runtime-tooling removal
+## Approved runtime-tooling removal
 
-The uncommitted patch removes npm, npx, Yarn launchers and the Yarn installation from the shared final runtime stage. Build/dependency stages retain their installers. No dependency version, base digest, application command or trust boundary changes.
+The approved patch removes npm, npx, Yarn launchers and the Yarn installation from the shared final runtime stage. Build/dependency stages retain their installers. No dependency version, base digest, application command or trust boundary changes.
 
-Affected implementation files: `infra/docker/Dockerfile` and `scripts/container-smoke.mjs`. Proposed commit: `fix: remove package managers from runtime images`.
+Affected implementation files: `infra/docker/Dockerfile` and `scripts/container-smoke.mjs`. Local commit: `557b471`, `fix: remove package managers from runtime images`. Later license assertions in those files are a separate pending patch.
 
 Actual validation:
 
@@ -70,10 +70,10 @@ Node's built-in libraries, including bundled fetch code, are not proved free of 
 
 ## Remaining work
 
-1. Review and approve the exact runtime patch before committing it, then validate it in hosted CI.
+1. Validate the committed runtime patch and the separately prepared follow-up patches in hosted CI after exact review.
 2. Triage remaining fixable high/critical third-party image findings, choose narrowly scoped pinned updates and run their real integration suites before requesting approval. Record vendor applicability decisions individually.
 3. Complete license/NOTICE review, including unknown and statically linked components.
-4. Keep OBS-CLI-01 open until its historical exit-4 failure has a supported classification; later green runs are not a causal fix.
-5. Resolve the owner's deferred license/private-reporting decisions and define registry/release identity before implementing artifact publication.
+4. Review and validate the prepared resolver-isolation fix for the reproduced OBS-CLI-01 signature. Preserve the original historical attribution limit.
+5. Finish inherited/native notice review and enable the selected reporting/publication prerequisites before executing the prepared pipeline.
 
 The approved stage-six source did pass [all four hosted CI jobs](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45735028140). CI-ARM-01 is resolved; image/release readiness remains in progress.

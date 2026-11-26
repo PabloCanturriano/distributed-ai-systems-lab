@@ -38,7 +38,8 @@
     "test:phase4": "node scripts/phase4-check.mjs",
     "test:phase5": "node scripts/phase5-check.mjs",
     "evaluate:workflow": "npm run build && node scripts/agent-workflow-eval.mjs",
-    "export:openapi": "npm run build && node scripts/export-openapi.mjs"
+    "export:openapi": "npm run build && node scripts/export-openapi.mjs",
+    "test:quickstart": "node scripts/quickstart-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

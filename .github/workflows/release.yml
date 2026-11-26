@@ -1,0 +1,204 @@
+name: Evaluation release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Explicit evaluation version (v0.x.y-rc.N)
+        required: true
+        default: v0.1.0-rc.1
+      publish:
+        description: Publish only after all gates and environment approval
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require reviewed main source
+        env:
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_SHA: ${{ github.sha }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE_REF" = refs/heads/main
+          [[ "$VERSION" =~ ^v0\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]]
+          test "${#VERSION}" -le 64
+          gh api "repos/$GH_REPO/actions/workflows/foundation.yml/runs?head_sha=$SOURCE_SHA&event=push&per_page=20" \
+            --jq '[.workflow_runs[] | select(.head_sha == env.SOURCE_SHA)] | sort_by(.updated_at) | last | .status == "completed" and .conclusion == "success"' | grep -qx true
+
+  prepare:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - name: Install checksum-pinned scanners
+        run: bash scripts/install-release-scanners.sh "$RUNNER_TEMP/release-tools"
+      - name: Scan Git history with exact reviewed documentation exclusions
+        run: |
+          mkdir -p artifacts/release-candidate
+          "$RUNNER_TEMP/release-tools/gitleaks" git . --redact=100 --ignore-gitleaks-allow --no-banner --report-format json --report-path artifacts/release-candidate/secrets.json
+      - name: Build, inventory and require image gates
+        env:
+          VERSION: ${{ inputs.version }}
+        run: TRIVY_BIN="$RUNNER_TEMP/release-tools/trivy" node scripts/prepare-release.mjs "$VERSION" artifacts/release-candidate
+      - name: Preserve only bounded candidate artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-${{ matrix.architecture }}-${{ github.sha }}
+          path: artifacts/release-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  push-images:
+    if: ${{ inputs.publish }}
+    needs: [preflight, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - name: Require public reporting and configured release reviewers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO" --jq '.private == false' | grep -qx true
+          gh api "repos/$GH_REPO/private-vulnerability-reporting" --jq '.enabled == true' | grep -qx true
+          gh api "repos/$GH_REPO/environments/release" --jq '[.protection_rules[] | select(.type == "required_reviewers") | .reviewers[]] | length > 0' | grep -qx true
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: release-*-${{ github.sha }}
+          path: artifacts/release-candidate
+          merge-multiple: true
+      - name: Authenticate for this publication only
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USER" --password-stdin
+      - name: Push verified images and immutable manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: node scripts/publish-release.mjs "$VERSION" artifacts/release-candidate "$SOURCE_SHA"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: published-manifest-${{ github.sha }}
+          path: artifacts/release-candidate/published-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove registry session
+        if: ${{ always() }}
+        run: docker logout ghcr.io
+
+  verify-published:
+    needs: push-images
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: published-manifest-${{ github.sha }}
+          path: artifacts/release-candidate
+      - name: Require anonymous pulls and real published-image behavior
+        run: node scripts/quickstart-smoke.mjs --images artifacts/release-candidate/published-manifest.json
+      - name: Preserve sanitized journey evidence
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: cp artifacts/reviewer-quickstart-report.json "artifacts/release-candidate/$ARCHITECTURE-journey.json"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: published-journey-${{ matrix.architecture }}-${{ github.sha }}
+          path: artifacts/release-candidate/*-journey.json
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [push-images, verify-published]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: '*-${{ github.sha }}'
+          path: artifacts/release-candidate
+          merge-multiple: true
+      - name: Create evaluation release only after both real journeys pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: node scripts/finalize-release.mjs "$VERSION" artifacts/release-candidate "$SOURCE_SHA"

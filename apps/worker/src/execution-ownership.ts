@@ -1,4 +1,7 @@
-import { citationSchema } from '@lab/knowledge';
+import { agentSummarySchema } from '@lab/configuration';
+import { evidenceSchema } from './bounded-agent';
+import { insertOwnedEvidence } from './execution-evidence';
+import { validateEvidenceResult, citationSchema } from '@lab/knowledge';
 import { validTraceParent, noTelemetry, type Telemetry } from '@lab/telemetry';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -39,6 +42,12 @@ const identity = z.tuple([z.uuid(), z.uuid()]);
 const resultSchema = z
   .strictObject({
     outcome: z.enum(['answered', 'insufficient_evidence']),
+    agent: z
+      .strictObject({
+        summary: agentSummarySchema,
+        evidence: z.array(evidenceSchema).max(5),
+      })
+      .optional(),
     citations: z.array(citationSchema).max(5).default([]),
     answer: z
       .string()
@@ -353,6 +362,45 @@ export class ExecutionOwnership {
     return this.transaction(async (client) => {
       const job = await this.lock(client, jobId);
       if (!job || !(await this.owned(client, job, attemptId))) return false;
+      const configuration = (
+        await client.query(
+          'SELECT snapshot_id,profile_id,policy_version FROM lab.execution_configurations WHERE tenant_id=$1 AND ticket_id=$2 AND generation=$3',
+          [job.tenant_id, job.ticket_id, job.generation],
+        )
+      ).rows[0];
+      if (
+        (configuration?.policy_version === 'bounded-agent-v1') !==
+        Boolean(result.data.agent)
+      )
+        throw new ExecutionOwnershipError('INVALID_REQUEST');
+      if (result.data.agent) {
+        const { agent, ...answer } = result.data;
+        try {
+          validateEvidenceResult(answer, {
+            tenantId: job.tenant_id,
+            snapshotId: configuration.snapshot_id,
+            evidence: agent.evidence,
+          });
+        } catch {
+          throw new ExecutionOwnershipError('INVALID_REQUEST');
+        }
+        await insertOwnedEvidence(
+          client,
+          {
+            tenantId: job.tenant_id,
+            ticketId: job.ticket_id,
+            generation: job.generation,
+            jobId: job.id,
+            attemptId,
+            attemptNumber: job.attempt_count,
+          },
+          {
+            snapshotId: configuration.snapshot_id,
+            profile: configuration.profile_id,
+          },
+          agent.evidence,
+        );
+      }
       for (const citation of result.data.citations) {
         const delivered = await client.query(
           'SELECT chunk_id FROM lab.execution_evidence WHERE tenant_id=$1 AND ticket_id=$2 AND generation=$3 AND attempt_id=$4 AND chunk_id=$5 AND document_id=$6 AND document_version=$7',
@@ -370,7 +418,7 @@ export class ExecutionOwnership {
           throw new ExecutionOwnershipError('INVALID_REQUEST');
       }
       await client.query(
-        "INSERT INTO lab.execution_results(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_count,outcome,answer,provider_mode) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'simulated')",
+        "INSERT INTO lab.execution_results(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_count,outcome,answer,provider_mode,agent_summary) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'simulated',$9)",
         [
           job.tenant_id,
           job.ticket_id,
@@ -380,6 +428,7 @@ export class ExecutionOwnership {
           job.attempt_count,
           result.data.outcome,
           result.data.answer,
+          result.data.agent ? JSON.stringify(result.data.agent.summary) : null,
         ],
       );
       for (const [i, citation] of result.data.citations.entries())

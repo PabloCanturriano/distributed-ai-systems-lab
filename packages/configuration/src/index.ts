@@ -139,3 +139,9 @@ export function loadExecutorConfiguration(environment: Environment) {
     },
   });
 }
+
+export {
+  agentSummarySchema,
+  agentPolicyVersion,
+  type AgentSummary,
+} from './agent-summary';

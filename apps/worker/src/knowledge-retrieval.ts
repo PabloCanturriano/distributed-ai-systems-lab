@@ -11,7 +11,7 @@ const schema = z.strictObject({
   tenantId: z.uuid(),
   snapshotId: z.uuid(),
   profile: z.literal(retrievalProfile),
-  policy: z.literal(policyVersion).default(policyVersion),
+  policy: z.enum([policyVersion, 'bounded-agent-v1']).default(policyVersion),
   query: z
     .string()
     .trim()

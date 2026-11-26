@@ -648,3 +648,146 @@ test('a legacy execution without pinned configuration keeps its original abstent
     ).rows[0].n,
   ).toBe(0);
 });
+
+test('agent ticket tool reads only own-tenant lifecycle fields with the real worker role', async () => {
+  await seed();
+  const receipt = await accepted('PRIVATE_TOOL_MESSAGE_MUST_NOT_LEAVE');
+  const { ReadOnlyAgentTools } = require('../../apps/worker/dist/agent-tools');
+  const {
+    KnowledgeRetrieval,
+  } = require('../../apps/worker/dist/knowledge-retrieval');
+  const scope = { tenantId: tenant, snapshotId: snapshot },
+    signal = new AbortController().signal;
+  const catalogue = { version: 'services-v1', services: [] };
+  const tools = new ReadOnlyAgentTools(
+    scope,
+    workerPool,
+    new KnowledgeRetrieval(workerPool),
+    catalogue,
+  );
+  const result = await tools.ticket(scope, receipt.ticketId, signal);
+  expect(Object.keys(result).sort()).toEqual([
+    'createdAt',
+    'generation',
+    'status',
+    'ticketId',
+    'updatedAt',
+  ]);
+  expect(result).toMatchObject({
+    ticketId: receipt.ticketId,
+    generation: 1,
+    status: 'queued',
+  });
+  expect(JSON.stringify(result)).not.toContain(
+    'PRIVATE_TOOL_MESSAGE_MUST_NOT_LEAVE',
+  );
+  const foreignScope = { tenantId: otherTenant, snapshotId: otherSnapshot };
+  const foreignTools = new ReadOnlyAgentTools(
+    foreignScope,
+    workerPool,
+    new KnowledgeRetrieval(workerPool),
+    catalogue,
+  );
+  const foreign = await foreignTools.ticket(
+    foreignScope,
+    receipt.ticketId,
+    signal,
+  );
+  expect(foreign).toEqual({ code: 'NOT_FOUND' });
+  expect(foreign).toEqual(await tools.ticket(scope, randomUUID(), signal));
+});
+test('the bounded offline agent uses real scoped retrieval and lifecycle tools after credential revocation', async () => {
+  await seed();
+  const receipt = await accepted();
+  const { ReadOnlyAgentTools } = require('../../apps/worker/dist/agent-tools');
+  const {
+    KnowledgeRetrieval,
+  } = require('../../apps/worker/dist/knowledge-retrieval');
+  const { runBoundedAgent } = require('../../apps/worker/dist/bounded-agent');
+  const {
+    scriptedAnswer,
+  } = require('../../apps/worker/dist/evidence-provider');
+  const scope = { tenantId: tenant, snapshotId: snapshot },
+    signal = new AbortController().signal;
+  const tools = new ReadOnlyAgentTools(
+    scope,
+    workerPool,
+    new KnowledgeRetrieval(workerPool),
+    { version: 'services-v1', services: [] },
+  );
+  await migrator.query(
+    'UPDATE lab.principals SET disabled_at=clock_timestamp() WHERE id=$1',
+    [principal],
+  );
+  try {
+    let turn = 0;
+    const model = {
+      mode: 'simulated',
+      decide: async (input) => {
+        expect(JSON.stringify(input)).not.toContain('SUMMIT_ONLY_SENTINEL');
+        if (++turn === 1)
+          return {
+            kind: 'tool',
+            name: 'get_ticket',
+            arguments: { ticketId: receipt.ticketId },
+          };
+        expect(input.history[0].result).toMatchObject({
+          ticketId: receipt.ticketId,
+          status: 'queued',
+        });
+        return {
+          kind: 'final',
+          result: scriptedAnswer(input.question, input.evidence),
+        };
+      },
+    };
+    const result = await runBoundedAgent({
+      context: scope,
+      question: 'retry policy exponential jitter',
+      signal,
+      model,
+      tools,
+    });
+    expect(result.result.outcome).toBe('answered');
+    expect(result.result.citations[0].documentId).toBe(document);
+    expect(result.summary.toolCalls).toEqual([
+      { name: 'get_ticket', outcome: 'observed' },
+    ]);
+    expect(
+      (
+        await migrator.query(
+          'SELECT count(*)::int AS n FROM lab.execution_results',
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  } finally {
+    await migrator.query(
+      'UPDATE lab.principals SET disabled_at=NULL WHERE id=$1',
+      [principal],
+    );
+  }
+});
+
+test('phase five activation upgrades only new acceptance while old receipts keep the extractive policy', async () => {
+  await seed();
+  const old = await accepted();
+  const c = await seedPool.connect();
+  try {
+    await c.query('SET ROLE lab_seed');
+    await seedKnowledge(c, manifest(), 'bounded-agent-v1');
+  } finally {
+    c.release();
+  }
+  const fresh = await accepted();
+  const rows = (
+    await migrator.query(
+      'SELECT ticket_id,policy_version FROM lab.execution_configurations ORDER BY ticket_id',
+    )
+  ).rows;
+  expect(rows.find((r) => r.ticket_id === old.ticketId).policy_version).toBe(
+    'extractive-simulated-v1',
+  );
+  expect(rows.find((r) => r.ticket_id === fresh.ticketId).policy_version).toBe(
+    'bounded-agent-v1',
+  );
+});

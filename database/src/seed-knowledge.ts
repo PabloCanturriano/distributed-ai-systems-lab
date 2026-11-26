@@ -11,8 +11,12 @@ import {
 export async function seedKnowledge(
   seed: Pick<Client, 'query'>,
   input: unknown,
+  selectedPolicy:
+    'extractive-simulated-v1' | 'bounded-agent-v1' = policyVersion,
 ): Promise<{ status: 'created' | 'unchanged'; snapshots: number }> {
   const manifest = parseCorpus(input);
+  if (!['extractive-simulated-v1', 'bounded-agent-v1'].includes(selectedPolicy))
+    throw Error('Invalid corpus policy');
   let created = false;
   await seed.query('BEGIN');
   try {
@@ -165,14 +169,28 @@ export async function seedKnowledge(
         (!active ||
           active.snapshot_id !== tenant.snapshotId ||
           active.profile_id !== retrievalProfile ||
-          active.policy_version !== policyVersion ||
+          (active.policy_version !== selectedPolicy &&
+            !(
+              active.policy_version === policyVersion &&
+              selectedPolicy === 'bounded-agent-v1'
+            )) ||
           active.provider_mode !== 'simulated')
       )
         throw Error('Corpus selection changed');
+      if (existing && active.policy_version !== selectedPolicy)
+        await seed.query(
+          'UPDATE lab.tenant_corpus_profiles SET policy_version=$2 WHERE tenant_id=$1',
+          [tenant.tenantId, selectedPolicy],
+        );
       if (!existing)
         await seed.query(
           "INSERT INTO lab.tenant_corpus_profiles(tenant_id,snapshot_id,profile_id,policy_version,provider_mode) VALUES($1,$2,$3,$4,'simulated') ON CONFLICT(tenant_id) DO UPDATE SET snapshot_id=excluded.snapshot_id,profile_id=excluded.profile_id,policy_version=excluded.policy_version,provider_mode=excluded.provider_mode",
-          [tenant.tenantId, tenant.snapshotId, retrievalProfile, policyVersion],
+          [
+            tenant.tenantId,
+            tenant.snapshotId,
+            retrievalProfile,
+            selectedPolicy,
+          ],
         );
     }
     await seed.query('COMMIT');

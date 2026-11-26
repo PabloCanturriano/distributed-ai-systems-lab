@@ -5,7 +5,7 @@ export interface ExecutionContext {
   tenantId: string;
   snapshotId: string;
   profile: 'lexical-hash-v1';
-  policy: 'extractive-simulated-v1';
+  policy: 'extractive-simulated-v1' | 'bounded-agent-v1';
   message: string;
 }
 export class ExecutionEvidence {
@@ -52,7 +52,9 @@ export class ExecutionEvidence {
       if (row.snapshot_id === null) return null; // Jobs accepted before RAG retain their original abstention mode.
       if (
         row.profile_id !== 'lexical-hash-v1' ||
-        row.policy_version !== 'extractive-simulated-v1' ||
+        !['extractive-simulated-v1', 'bounded-agent-v1'].includes(
+          row.policy_version,
+        ) ||
         row.provider_mode !== 'simulated'
       )
         throw Error();
@@ -105,29 +107,47 @@ export class ExecutionEvidence {
         ],
       );
       if (current.rowCount !== 1) throw Error();
-      for (const [i, row] of evidence.entries()) {
-        const inserted = await c.query(
-          `INSERT INTO lab.execution_evidence(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_number,position,snapshot_id,profile_id,document_id,document_version,chunk_id)
+      await insertOwnedEvidence(c, claim, context, evidence);
+    });
+  }
+}
+
+// Caller must hold the ticket/job locks and verify current generation, attempt and lease.
+export async function insertOwnedEvidence(
+  c: PoolClient,
+  claim: Pick<
+    ExecutionClaim,
+    | 'tenantId'
+    | 'ticketId'
+    | 'generation'
+    | 'jobId'
+    | 'attemptId'
+    | 'attemptNumber'
+  >,
+  context: Pick<ExecutionContext, 'snapshotId' | 'profile'>,
+  evidence: Evidence[],
+): Promise<void> {
+  for (const [i, row] of evidence.entries()) {
+    const inserted = await c.query(
+      `INSERT INTO lab.execution_evidence(tenant_id,ticket_id,generation,job_id,attempt_id,attempt_number,position,snapshot_id,profile_id,document_id,document_version,chunk_id)
           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,c.document_id,c.document_version,c.id FROM lab.document_chunks c
             WHERE c.tenant_id=$1 AND c.id=$10 AND c.document_id=$11 AND c.document_version=$12 AND c.content=$13 RETURNING chunk_id`,
-          [
-            claim.tenantId,
-            claim.ticketId,
-            claim.generation,
-            claim.jobId,
-            claim.attemptId,
-            claim.attemptNumber,
-            i + 1,
-            context.snapshotId,
-            context.profile,
-            row.chunkId,
-            row.documentId,
-            row.documentVersion,
-            row.content,
-          ],
-        );
-        if (inserted.rowCount !== 1) throw Error();
-      }
-    });
+      [
+        claim.tenantId,
+        claim.ticketId,
+        claim.generation,
+        claim.jobId,
+        claim.attemptId,
+        claim.attemptNumber,
+        i + 1,
+        context.snapshotId,
+        context.profile,
+        row.chunkId,
+        row.documentId,
+        row.documentVersion,
+        row.content,
+      ],
+    );
+    if (inserted.rowCount !== 1) throw Error();
   }
 }

@@ -1,6 +1,6 @@
 # Ticket HTTP and event contracts
 
-Status: phases 2–3 are committed and pushed with passing CI. The phase-4 working tree adds pinned offline corpus execution, delivered-evidence citation checks and simulated answered extracts alongside abstention; see [phase-4 evidence](../quality/phase4.md). Real-model and agent/tool behavior remain future work.
+Status: phases 2–4 are published with passing CI; the working-tree phase-5 implementation adds bounded agent execution and safe summaries under a new pinned policy. See [phase-5 verification](../quality/phase5.md). Real-model adapters remain optional and unimplemented.
 
 ## Common HTTP rules
 
@@ -76,7 +76,7 @@ State-dependent fields:
 
 A result has `outcome` (`answered` or `insufficient_evidence`), `answer` (string), `citations` (array), and `execution` (summary). Each citation has `documentId`, `documentVersion`, and `chunkId`; references must resolve to the ticket tenant's stored corpus version. An `answered` result requires at least one valid citation. Abstention uses `insufficient_evidence`, an explanatory answer, and an empty citation array; it is a successful completion, not an infrastructure failure.
 
-The execution summary contains `providerMode` (`simulated` or `real`), `attemptCount`, and `toolCalls` with only tool name and outcome (`succeeded` or `failed`). It excludes arguments, raw outputs, prompts, and internal exceptions. Summary sizes follow the proposed [runtime budgets](runtime-limits.md).
+Implemented result summaries use `providerMode: simulated`, `attemptCount` and `toolCalls`. New agent results additionally expose `policy: bounded-agent-v1` and `modelTurns` (1–4), with at most three tool entries containing only `name` (`search_documentation`, `get_ticket` or `get_service_status`) and `outcome` (`observed` or `not_found`). Legacy/extractive results retain their original empty tool list and omit agent policy/turn fields. Arguments, raw outputs, prompts and exceptions are excluded. Stored agent summaries are capped at 4 KiB and checked by both application and database schemas. Tool/model errors map to generic execution failure or bounded durable retry; they are not reflected in public result summaries. A real-provider result contract remains unimplemented and separately reviewed.
 
 A failure has an allowlisted `code` and safe `message`. Initial codes are `EXECUTION_FAILED` and `ATTEMPTS_EXHAUSTED`. Provider errors, credentials, SQL, stack traces, and document excerpts are never copied into it. Generation history, ticket lists, streaming, and cancellation endpoints are outside this first contract.
 

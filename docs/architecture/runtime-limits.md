@@ -1,6 +1,6 @@
 # Runtime limits and future AI budgets
 
-Status: work/ownership and HTTP limits below describe the committed local implementation; AI/tool budgets remain proposed until those adapters exist. These are finite policy bounds, not measured performance targets.
+Status: work/ownership and HTTP limits below describe the committed local implementation; AI/tool budgets are implemented in the offline agent and activated for newly pinned `bounded-agent-v1` executions. Real-provider token controls remain proposed. These are finite policy bounds, not measured performance targets.
 
 ## Work and ownership
 
@@ -37,6 +37,8 @@ On shutdown, stop readiness and new claims first. Finish only work that fits the
 | Generated answer | 8 KiB UTF-8 |
 | Final execution summary | 4 KiB UTF-8 |
 | Real generation output | At most 1,024 output tokens per model turn |
+
+The `bounded-agent-v1` library enforces these offline turn, tool, byte and deadline bounds. Initial retrieval has its own three-second deadline and does not consume a model-selected tool call. A tool cannot consume turn four because no model turn would remain to inspect its result. Search evidence is accumulated without eviction; exceeding five distinct chunks rejects the call rather than invalidating previously delivered references. Tool-result size includes serialized JSON metadata. Summaries contain only fixed names, outcomes and counters. Parent aborts interrupt the run; a dependency that ignores cancellation cannot cause another call in that run. The executor enforces live-attempt database fencing and atomic evidence/result completion after the call.
 
 Stop before a call if no budget remains. Never silently truncate structured arguments or IDs into a different valid request. Oversized tool/model output is rejected as a safe execution failure; citation IDs must still be validated. Provider token limits are adapter-specific and require compatibility tests. Byte limits do not establish an exact dollar ceiling; live cost reports use provider usage when available and flag missing usage.
 

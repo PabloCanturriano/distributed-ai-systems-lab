@@ -4,9 +4,11 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Phase 4 locally verified; patches prepared for review.** The authenticated CLI/API → PostgreSQL outbox → real Kafka → durable admission → automatic simulated result workflow is committed through `522d404`, with passing x64 and ARM64 CI. Phase 3 is published through `7651620` with passing x64/ARM64 CI, including audited local delivery repair, bounded OpenTelemetry export and observed host recovery. Phase 4 adds an immutable tenant corpus, exact lexical retrieval, pinned execution context and simulated extracts with validated citations in the working tree.
+**Phase 4 approved and published through `482ff37`.** The working CLI/API → PostgreSQL outbox → Kafka → executor path now retrieves immutable tenant-scoped evidence and returns simulated extracts with validated citations. Its complete local acceptance passed 16 gates and 52 criteria; [hosted CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45535949637) passed all four jobs, including x64 and ARM64.
 
-See the [phase-4 acceptance record](docs/quality/phase4.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for actual verification and limitations. Exact code patches still require owner approval before commit. Results remain simulated. The lexical retrieval report is separate from answer quality; tools/agent behavior, real-provider work and release remain future phases.
+Phase 5 is implemented in the working tree: the bounded offline agent now runs inside the ticket executor, invokes three tenant-scoped read-only tools and atomically persists evidence, citations and safe summaries. The [phase-5 acceptance record](docs/quality/phase5.md) tracks verification and exact-patch review. New code remains uncommitted pending owner approval. Results are simulated; workflow tests and retrieval scores do not measure real-model answer quality.
+
+See the [phase-4 acceptance record](docs/quality/phase4.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for verification and limits. Real-provider work and release remain future slices.
 
 ## Local CLI
 

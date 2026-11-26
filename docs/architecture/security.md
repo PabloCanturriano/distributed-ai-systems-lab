@@ -1,6 +1,6 @@
 # Local authentication and threat model
 
-Status: design requirements with partial [database privilege evidence](../quality/reviews/0004-database-foundation.md). Non-login privilege groups, identity-table grants, and [trusted local identity seeding](../operations/local-identities.md) are implemented. The [Compose foundation](../operations/compose-foundation.md) now provisions restricted database logins and private password volumes. The [API readiness adapter](../operations/api-readiness.md) mounts only its own database password and reads metadata through its restricted role. Authenticated HTTP submission, server-derived tenant scope and Redis request limits are [prepared for review](../quality/reviews/0012-authenticated-ticket-http.md). Other routes and the remaining controls below are not implemented protections. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md).
+Status: the published phases 2–4 include authenticated tenant-scoped HTTP, restricted local logins, private credentials and recovery/telemetry controls. The working-tree phase-five agent adds strict read-only tool authority, bounded output and content-free traces under [its acceptance record](../quality/phase5.md). Controls for optional real providers remain design requirements until that separately reviewed feature exists. Read with the [HTTP/event contracts](contracts.md) and [data model](data-model.md); a criterion without recorded evidence is not an implemented guarantee.
 
 ## Scope and assumptions
 
@@ -109,3 +109,9 @@ These are required scenarios. Current passing submission/authentication subsets 
 - SEC-14: runtime database roles cannot perform migration/admin actions or unauthorized module writes.
 
 Proposed execution budgets and rate limits are defined in [runtime limits](runtime-limits.md). Credential file permissions on supported platforms and automated secret scanning require implementation evidence. Ingestion and tool contracts must preserve these trust boundaries. Security design approval alone does not authorize application scaffolding.
+
+## Phase-five implemented tool boundary
+
+The fixed offline executor binds tenant/snapshot/policy from the accepted live job; model arguments cannot supply those fields. Only documentation search, current-generation ticket lifecycle and the owned fictional service catalogue are available. All inputs/results are strict, serial and bounded. Unknown/foreign IDs share non-disclosing responses; no tool can read credentials, send messages, mutate state or select URLs/files/shell. Accepted work retains this system capability after requester revocation.
+
+Result completion atomically commits exact evidence, citations, validated safe tool summary and lifecycle after generation/token/database-lease fencing. Provider/model/tool traces record stage, safe IDs and outcome only. Worker credential sharing is still a trusted module boundary rather than tenant RLS. See [review 0026](../quality/reviews/0026-bounded-offline-agent.md) for tests and limitations; no live-model semantic resistance is claimed from deterministic injection fixtures.

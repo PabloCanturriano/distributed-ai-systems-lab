@@ -1,6 +1,6 @@
 # Phase 4: offline retrieval and evidence
 
-Status: locally complete. All 16 gates and all 52 criteria passed against unchanged sources on 2026-11-24. The exact implementation patches are prepared for owner review before commit. Phase 3 was approved, committed and pushed through `7651620`, with [successful x64/ARM64 CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45525531992). Phase-4 code commits require approval of their exact patches.
+Status: locally complete. All 16 gates and all 52 criteria passed against unchanged sources on 2026-11-24. The owner approved the exact five implementation patches; they are committed and pushed through `482ff37`. Phase 3 was approved, committed and pushed through `7651620`, with [successful x64/ARM64 CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45525531992). The [published phase-4 CI run](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45535949637) is separate from this local record.
 
 ## Delivered behavior
 

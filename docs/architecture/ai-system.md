@@ -1,6 +1,6 @@
 # Retrieval, agent, and tool design
 
-Status: phase-4 offline corpus, lexical retrieval, pinned configuration, evidence/citation persistence and extractive simulation are implemented in the working tree with [acceptance evidence](../quality/phase4.md). Agent state machines, tools and real-provider adapters remain proposed. Read with [ADR-0003](../adr/0003-offline-ai-and-evaluation-boundaries.md), [security](security.md), and [runtime limits](runtime-limits.md).
+Status: phase-4 corpus, lexical retrieval, pinned configuration and cited extractive simulation are published through `482ff37`. The phase-5 bounded offline agent is activated in the working-tree executor, with [acceptance evidence](../quality/phase5.md) and exact-patch review pending. Real-provider adapters remain proposed. Read with [ADR-0003](../adr/0003-offline-ai-and-evaluation-boundaries.md), [security](security.md), and [runtime limits](runtime-limits.md).
 
 ## Corpus and reproducibility
 
@@ -8,9 +8,9 @@ Seed two fictional tenants with distinct API-operation and incident-response doc
 
 A corpus manifest identifies document IDs, immutable versions, content digests, tenant membership, and a snapshot ID. Re-running bootstrap with an unchanged manifest is a no-op. Changed content under an existing immutable version is an error, not an overwrite. New documents require a new snapshot/version. Preserve cited snapshots and chunks for execution history.
 
-An active corpus pointer is tenant-scoped. Once RAG is introduced, acceptance of a new execution binds corpus snapshot, retrieval profile, provider mode, and agent-policy version in its transaction. Retries preserve this configuration. Replay may bind the current snapshot as a new generation and records that choice. An unavailable snapshot/profile blocks new acceptance rather than silently changing retry context.
+An active corpus pointer is tenant-scoped. Acceptance of a new execution binds corpus snapshot, retrieval profile, provider mode, and agent-policy version in its transaction. Retries preserve this configuration. Replay may bind the current snapshot as a new generation and records that choice. An unavailable snapshot/profile blocks new acceptance rather than silently changing retry context.
 
-The logical data model must include corpus snapshots, snapshot/document-version membership, tenant active pointers, and the execution configuration references when this phase is implemented. These are planned additions, not permission to migrate the database before architecture approval.
+The implemented data model includes corpus snapshots, snapshot/document-version membership, tenant active pointers and immutable execution configuration references.
 
 ## Chunking and baseline retrieval
 
@@ -22,9 +22,9 @@ For the small corpus, use exact cosine similarity in pgvector over only the auth
 
 A real embedding profile has its own model ID, dimensions, preprocessing version, and compatible storage/query path. It cannot reuse offline vectors. Do not add approximate indexes before measured query plans and recall evidence justify them. Cache keys include tenant, snapshot, profile, query digest, and relevant policy version; the initial design does not cache generated answers.
 
-## Planned agent execution (phase 5)
+## Bounded offline agent library (phase 5)
 
-Use a small state machine: prepare scoped context, request a model decision, validate a tool request or final answer, execute an allowed tool, then continue until a final answer or a budget boundary. Do not add open-ended planning, recursive agents, dynamic plugins, or a general workflow framework.
+The library implements a small state machine: prepare scoped context, request a model decision, validate a tool request or final answer, execute an allowed tool, then continue until a final answer or a budget boundary. Do not add open-ended planning, recursive agents, dynamic plugins, or a general workflow framework.
 
 The initial retrieval supplies authorized evidence even if the model never asks for another search. The scripted provider follows fixture-defined decisions through the same validators and tool executor. Its determinism is useful for failure tests, not evidence of autonomous reasoning.
 
@@ -34,7 +34,17 @@ Final-answer objects contain outcome, answer, and citation references. `answered
 
 Provider errors map to safe internal classifications. No model-generated instructions can change permissions, provider endpoints, deadlines, or corpus selection. Attempt fencing remains required after a provider call, including a successful one.
 
-## Planned read-only tools (phase 5)
+### Activation and durability
+
+The fixed initializer selects `bounded-agent-v1` for new acceptance. Repeating the same corpus may advance an extractive active pointer to this policy, but cannot downgrade it or rewrite old execution configurations. Legacy jobs without configuration retain the original abstention provider; pinned `extractive-simulated-v1` jobs retain the phase-four extractive provider. Replay records the active policy as a new generation.
+
+`OfflineTicketModel` is a fixed simulated workflow: search documentation with the question when it fits the 500-code-point tool argument bound, read the current ticket lifecycle, read the tenant's `support-api` fixture, and return a validated extract or abstention. Longer accepted questions retain initial retrieval and skip the additional search rather than truncate it. Tool results enter context, but the simulation still derives answered text only from indexed documentary evidence. This is contract exercise, not autonomous planning or semantic generation.
+
+Agent execution performs no durable writes before completion. Under the existing ticket/job locks, completion verifies current generation, attempt and database lease, checks the pinned policy, inserts immutable delivered evidence, validates citations, and commits summary/result/citations/lifecycle together. Any failure rolls everything back. A response returned after ownership loss cannot persist; a crashed attempt may repeat read-only tool work after lease recovery. Default manual traces name only `model.decide`, `tool.run` and `retrieval.search`, with safe IDs/outcomes and no model/tool inputs or outputs.
+
+## Internal read-only tools (phase 5)
+
+The internal adapters run through the trusted executor composition and expose no public endpoints. `get_service_status` reads a validated, immutable, host-supplied fictional catalogue, not live health probes. The executor reads only the image-owned `fixtures/knowledge/services-v1.json` catalogue. Its two fictional tenants share the allowed `support-api` ID with different status observations. `get_ticket` reads only current-generation lifecycle fields through the worker role; its `createdAt` is the generation creation time. `search_documentation` reuses phase-four lexical retrieval using the pinned policy in its cache identity.
 
 All argument objects reject unknown fields. Tenant/principal context is injected by the executor and is never an argument the model can choose.
 

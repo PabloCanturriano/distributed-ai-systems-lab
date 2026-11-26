@@ -1,6 +1,6 @@
 # Documentation map
 
-The committed repository includes complete phases 2–3 through `7651620`, with passing x64/ARM64 CI. The phase-4 working tree adds immutable offline corpus/retrieval, pinned execution context, delivered-evidence citations and separate measured ranking reports. See [phase-4 evidence](quality/phase4.md) and [knowledge operations](operations/knowledge.md) for verification and pending exact-patch approval. Agent/tools, optional real-provider evaluation and release remain future work.
+The published repository includes complete phases 2–4 through `482ff37`, with passing x64/ARM64 CI. The working-tree phase-five implementation activates a bounded offline agent, three scoped read-only tools, atomic evidence/result summaries and content-free model/tool tracing. See [phase-five acceptance](quality/phase5.md), [its exact-patch review](quality/reviews/0026-bounded-offline-agent.md) and [knowledge operations](operations/knowledge.md) for verification and approval status. Optional real-provider evaluation and phase-six release preparation remain separate.
 
 ## Read in this order
 

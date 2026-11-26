@@ -1,6 +1,6 @@
 # Phase 4: offline retrieval and cited execution
 
-Status: prepared against phase-3 head `765162058ade8d48de3fa10775d30715563df05a`, published with successful x64/ARM64 CI. The accepted architecture is ADR-0003 and the corpus/pinning/citation design. The complete local phase-4 gate passed all 16 controls and 52 criteria against frozen sources. These code patches require exact owner approval before commit; previous phase-3 approval does not approve this new diff.
+Status: prepared against phase-3 head `765162058ade8d48de3fa10775d30715563df05a`, published with successful x64/ARM64 CI. The accepted architecture is ADR-0003 and the corpus/pinning/citation design. The complete local phase-4 gate passed all 16 controls and 52 criteria against frozen sources. The owner subsequently approved these exact five patches; they are committed and pushed as `7ea7969`, `ff3c30d`, `acb0572`, `13df94e` and `482ff37`. Hosted phase-4 CI is tracked separately from the original local evidence.
 
 ## Proposed logical commits
 

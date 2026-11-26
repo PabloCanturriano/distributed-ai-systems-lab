@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phases 2–3 are committed and pushed through `7651620`, with successful x64/ARM64 CI. Phase 4 is locally complete under ADR-0003: its [16-gate acceptance](quality/phase4.md) passed all 52 criteria against unchanged sources. Exact patches remain pending owner approval before commit. Tools/agent behavior, optional real-provider work and release remain future phases.
+Status: phases 2–4 are approved and published through `482ff37`, with passing x64/ARM64 CI. Phase 5 is implemented in the working tree under ADR-0003, including executor activation, durable evidence/summaries, read-only tools, API/CLI output and recovery/tracing checks. Its [acceptance record](quality/phase5.md) distinguishes verification from commit approval and publication. Optional real-provider work remains independently reviewed; phase 6 is release preparation.
 
 ## Phase 0: architecture review
 
@@ -37,6 +37,8 @@ Exit: relevant AI-01 through AI-04, AI-07, RESULT-01, DATA-08 and security cases
 ## Phase 5: bounded agent and optional real adapter
 
 Deliverables: state machine, three read-only tools, budgets, schema validation, simulated tool scenarios, and prompt-injection tests. A real provider is an optional independently reviewed slice, with its own model/embedding profiles and data/cost controls.
+
+Implementation: bounded policy activation preserves accepted legacy/extractive configurations. New agent completion atomically commits delivered evidence, citations, a safe summary and lifecycle state under the live attempt lease. API/CLI expose only validated tool names/outcomes and counters. The full [phase-5 gate](quality/phase5.md) retains every prior check and adds the separately labeled scripted workflow evaluation. See [review 0026](quality/reviews/0026-bounded-offline-agent.md) for exact patch scope and limitations.
 
 Exit: all AI and tool-related SEC cases pass in offline mode. A real-provider feature, if included, requires its own live evaluation evidence; skipping it does not validate it. No arbitrary network/file/shell capabilities or write tools are added.
 

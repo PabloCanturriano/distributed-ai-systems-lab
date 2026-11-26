@@ -12,7 +12,7 @@ docker compose --profile messaging --profile execution up --build --detach --wai
 docker compose run --rm -T cli demo --identity summit.requester --json
 ```
 
-The demo submits a fixed fictional question and waits for the persisted result. Output explicitly identifies a simulated `insufficient_evidence` response, with no citations or tools. No external model key is needed. The CLI is in the `tools` profile and does not start during an ordinary stack `up`; explicitly selecting its service with `run` activates it. The API dependency must be healthy before the client starts. Without both messaging and execution profiles, ordinary work may remain queued until the CLI deadline.
+The demo submits a fixed fictional question and waits for the persisted result. Output explicitly identifies a simulated indexed extract with citations, or an empty-citation abstention when evidence is insufficient. New agent results include safe tool summaries. No external model key is needed. The CLI is in the `tools` profile and does not start during an ordinary stack `up`; explicitly selecting its service with `run` activates it. The API dependency must be healthy before the client starts. Without both messaging and execution profiles, ordinary work may remain queued until the CLI deadline.
 
 Use the same built image for individual operations:
 
@@ -57,4 +57,14 @@ The manifest reader requires a private owned directory, a small owned regular 06
 
 ## Cited offline demo (phase 4)
 
-The phase-4 working tree changes the fixed demo question to `Explain retry policy.`. After the normal seed/build, `demo --identity harbor.requester --json` and `demo --identity summit.requester --json` return simulated excerpts from their respective immutable corpus. An answered result includes validated `documentId`, `documentVersion` and `chunkId` references; unsupported evidence returns an empty-citation abstention. See the [knowledge guide](knowledge.md) for algorithms, commands and separate retrieval measurements. No real model or tool execution is introduced.
+The published phase-four demo question is `Explain retry policy.`. After the normal seed/build, `demo --identity harbor.requester --json` and `demo --identity summit.requester --json` return simulated excerpts from their respective immutable corpus. An answered result includes validated `documentId`, `documentVersion` and `chunkId` references; unsupported evidence returns an empty-citation abstention. See the [knowledge guide](knowledge.md) for algorithms, commands and separate retrieval measurements. No real model is introduced. New `bounded-agent-v1` results execute the three read-only tools and expose only their names/outcomes plus model-turn counts; existing extractive results retain an empty tool list.
+
+## Agent summaries
+
+A completed new-generation result may include:
+
+```json
+{"providerMode":"simulated","attemptCount":1,"policy":"bounded-agent-v1","modelTurns":4,"toolCalls":[{"name":"search_documentation","outcome":"observed"},{"name":"get_ticket","outcome":"observed"},{"name":"get_service_status","outcome":"observed"}]}
+```
+
+This is the `ticket.result.execution` object. No tool arguments, outputs, prompts or exceptions appear in it. The client validates allowed names/outcomes, counters and result/citation consistency; unsupported metadata fails closed. A `not_found` tool outcome can still lead to a completed abstention. Old generations omit policy/model-turn fields and retain an empty tool list.

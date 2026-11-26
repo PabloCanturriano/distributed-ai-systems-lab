@@ -32,6 +32,8 @@ jobs:
           package-manager-cache: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - run: npm run export:openapi
+      - run: npm audit --omit=dev --audit-level=moderate
 
   integration:
     name: PostgreSQL, images, Compose and Kafka
@@ -67,6 +69,7 @@ jobs:
       - run: npm run evaluate:retrieval
       - run: npm run test:rag
       - run: npm run evaluate:workflow
+      - run: npm run test:quickstart
 
   kafka-client:
     name: Native client, relay and consumer on Linux ARM64
@@ -100,6 +103,7 @@ jobs:
       - run: npm run test:rag
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run evaluate:workflow
+      - run: npm run test:quickstart
 
   foundation:
     name: Foundation gate

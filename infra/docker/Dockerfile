@@ -47,6 +47,9 @@ COPY infra/docker/prepare-kafka-native.mjs /tmp/prepare-kafka-native.mjs
 RUN node /tmp/prepare-kafka-native.mjs
 
 FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime
+# Dependencies are installed in build stages; runtime commands invoke Node directly.
+RUN rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 ENV NODE_ENV=production APP_MODE=local
 WORKDIR /app
 USER node

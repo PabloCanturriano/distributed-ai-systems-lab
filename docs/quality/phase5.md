@@ -1,6 +1,6 @@
 # Phase 5: bounded offline agent acceptance
 
-Status: the offline implementation is locally complete in the working tree. All seventeen controls and 59 criteria passed against unchanged implementation/fixture sources on 2026-11-25. The published base is phase-four head `482ff37`, with successful x64/ARM64 CI. New code requires exact-patch approval before commit, and hosted phase-five CI has not run.
+Status: the offline implementation is locally complete in the working tree. All seventeen controls and 59 criteria passed against unchanged implementation/fixture sources on 2026-11-25. The published base is phase-four head `482ff37`, with successful x64/ARM64 CI. The approved source was committed and pushed through `c3b304c` in nine smaller commits without changing the reviewed final tree. Hosted phase-five CI is tracked separately from local acceptance.
 
 ## Implemented behavior
 

@@ -2,9 +2,9 @@
 
 ## Current status
 
-This repository is in design phase. No application release or production deployment exists, and no version is advertised as security-supported. All example data is intended to be fictional. Do not deploy the planned local lab on a public network without a separate security review.
+This repository implements a local distributed-systems lab and is preparing its first working release. No application release or production deployment exists, and no version is advertised as security-supported. All example data is intended to be fictional. Do not deploy the planned local lab on a public network without a separate security review.
 
-The proposed controls and trust boundaries are in the [security design](docs/architecture/security.md). They are requirements, not proof of implemented protection.
+The controls, implementation scope and trust boundaries are in the [security design](docs/architecture/security.md). Verification and outstanding release controls are recorded in [phase-six readiness](docs/quality/phase6.md); no security-supported release is advertised.
 
 ## Reporting a concern
 

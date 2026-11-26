@@ -1,6 +1,6 @@
 # Documentation map
 
-The published repository includes complete phases 2–4 through `482ff37`, with passing x64/ARM64 CI. The working-tree phase-five implementation activates a bounded offline agent, three scoped read-only tools, atomic evidence/result summaries and content-free model/tool tracing. See [phase-five acceptance](quality/phase5.md), [its exact-patch review](quality/reviews/0026-bounded-offline-agent.md) and [knowledge operations](operations/knowledge.md) for verification and approval status. Optional real-provider evaluation and phase-six release preparation remain separate.
+The published repository includes phases 2–5 through `c3b304c`. Phase-five local acceptance passed seventeen controls and 59 criteria, including bounded offline tools and durable safe summaries. [Phase-six readiness](quality/phase6.md) records the current contract/quickstart/dependency preparation and outstanding release decisions. Start with the [Docker-only reviewer journey](release/reviewer-quickstart.md); inspect [license/reporting options](release/policy-options.md) before selecting publication policies.
 
 ## Read in this order
 

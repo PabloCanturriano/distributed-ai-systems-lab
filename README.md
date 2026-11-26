@@ -4,11 +4,9 @@ An event-driven technical support backend for exploring reliable asynchronous pr
 
 ## Project status
 
-**Phase 4 approved and published through `482ff37`.** The working CLI/API → PostgreSQL outbox → Kafka → executor path now retrieves immutable tenant-scoped evidence and returns simulated extracts with validated citations. Its complete local acceptance passed 16 gates and 52 criteria; [hosted CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45535949637) passed all four jobs, including x64 and ARM64.
+**Phases 2–5 are published through `c3b304c`.** Phase five adds the bounded offline agent, tenant-scoped read-only tools, atomic evidence/citation/summary persistence and validated API/CLI output. Its [local acceptance](docs/quality/phase5.md) passed seventeen controls and 59 criteria; [hosted CI](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45728624070) tracks the published revision.
 
-Phase 5 is implemented in the working tree: the bounded offline agent now runs inside the ticket executor, invokes three tenant-scoped read-only tools and atomically persists evidence, citations and safe summaries. The [phase-5 acceptance record](docs/quality/phase5.md) tracks verification and exact-patch review. New code remains uncommitted pending owner approval. Results are simulated; workflow tests and retrieval scores do not measure real-model answer quality.
-
-See the [phase-4 acceptance record](docs/quality/phase4.md), [repair guide](docs/operations/delivery-repair.md) and [observability guide](docs/operations/observability.md) for verification and limits. Real-provider work and release remain future slices.
+[Phase-six release preparation](docs/quality/phase6.md) is in progress: OpenAPI export, production dependency triage and a reproducible Docker-only reviewer journey are prepared for review. Start with the [reviewer quickstart](docs/release/reviewer-quickstart.md). License and private reporting choices remain under analysis; no release or real-provider quality is claimed.
 
 ## Local CLI
 

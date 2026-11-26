@@ -1,6 +1,6 @@
 # Implementation roadmap and acceptance gates
 
-Status: phases 2–4 are approved and published through `482ff37`, with passing x64/ARM64 CI. Phase 5 is implemented in the working tree under ADR-0003, including executor activation, durable evidence/summaries, read-only tools, API/CLI output and recovery/tracing checks. Its [acceptance record](quality/phase5.md) distinguishes verification from commit approval and publication. Optional real-provider work remains independently reviewed; phase 6 is release preparation.
+Status: phases 2–5 are published through `c3b304c`. Phase five passed its complete local [seventeen-control acceptance](quality/phase5.md), covering 59 criteria; hosted CI is tracked separately. [Phase six](quality/phase6.md) is in progress with HTTP contract export, dependency triage and an isolated reviewer journey. Owner-selected license/reporting/publication policies and remaining release controls are still pending.
 
 ## Phase 0: architecture review
 

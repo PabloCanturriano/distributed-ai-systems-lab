@@ -53,3 +53,9 @@ A real-provider adapter still requires provider/model, outbound/data handling, t
 The first complete run passed thirteen controls, then the existing collector-outage scenario failed while its CLI waited for the fourth ticket (exit 4). That harness originally discarded the CLI error code and container/job state during cleanup, so the retained first failure does not establish a root cause. Safe diagnostics now report only command/error code, container status/exit/OOM state and job status/attempt/failure code; no request, result, credential or raw exception text is added.
 
 Two subsequent isolated executions with those diagnostics passed the same strict outage scenario. They do not prove a behavioral fix: no business implementation or assertion was relaxed, and the original cause remains unclassified. The mandatory scenario is retained in the final complete run and in both CI architectures. This is tracked as `OBS-CLI-01` for investigation before phase-six release; it is not quarantined or silently retried by the gate. Initial failed-run evidence is preserved with the review artifacts.
+
+## Publication and smaller commit boundaries
+
+The owner authorized commit/push and requested smaller commits. The same approved content was repartitioned into nine commits, with an unchanged final Git tree: `e030e88` bounded engine, `b7485b7` read-only tools, `69e39b2` durable evidence/summary contract, `5421fbc` provider/API, `5ad1b84` CLI, `5aae925` runtime activation, `f2c26e8` scripted evaluation, `c30ba39` acceptance/CI and `c3b304c` guidance. All nine were pushed to main.
+
+An isolated checkout validated format/types/build/fast tests at each of the first five boundaries. The durability boundary passed 209 SQL cases in all six suites; the provider/API boundary passed all 215 SQL cases. The final approved tree remained identical to the already verified seventeen-control snapshot. No history was amended or rewritten.

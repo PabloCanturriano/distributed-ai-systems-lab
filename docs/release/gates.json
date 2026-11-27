@@ -1,5 +1,10 @@
 {
   "schemaVersion": 1,
   "targetVersion": "v0.1.0-rc.1",
-  "openIssues": ["OBS-CLI-01", "BASE-IMAGE-TRIAGE", "FINAL-IMAGE-NOTICE-REVIEW"]
+  "openIssues": [
+    "BASE-IMAGE-TRIAGE",
+    "FINAL-IMAGE-NOTICE-REVIEW",
+    "NATIVE-KAFKA-REBUILD",
+    "BUNDLED-NODE-REVIEW"
+  ]
 }

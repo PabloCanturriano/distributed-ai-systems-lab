@@ -77,3 +77,11 @@ Node's built-in libraries, including bundled fetch code, are not proved free of 
 5. Finish inherited/native notice review and enable the selected reporting/publication prerequisites before executing the prepared pipeline.
 
 The approved stage-six source did pass [all four hosted CI jobs](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45735028140). CI-ARM-01 is resolved; image/release readiness remains in progress.
+
+## Current release-gate follow-up
+
+Published source `e21d17f` passed [all four foundation jobs](https://github.com/PabloCanturriano/distributed-ai-systems-lab/actions/runs/45861860217), including native ARM64 and the DNS isolation correction. Repository visibility, private vulnerability reporting and required release-environment review are now configured under the owner's instruction.
+
+The uncommitted filtered-runtime candidate removes unused official-image layers while preserving accurate Debian metadata. Its initial ARM64 relay scan reports zero critical/high records, with 28 medium, 14 low and two unknown records retained. This does not establish static dependency coverage: the pinned Kafka addon independently contains Zstandard 1.5.7 without the inspected upstream history-window fix. [Review 0029](../quality/reviews/0029-filtered-runtime-and-release-gates.md) records the evidence and [ADR-0010](../adr/0010-reproducible-kafka-native-build.md) proposes a source-identified native build. The release remains blocked; no scanner exclusion or general private-network waiver was introduced.
+
+The current upstream `pgvector:0.8.7-pg17-bookworm` tag still resolves to the previously scanned index digest `b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd`. A fresh tag lookup therefore does not constitute remediation. The same-major trixie alternative (`89947206f52eac3a9df9b663df7e76987cbdc623be6576b3a524953d568700d7`) was scanned on ARM64: two critical and 156 high records, compared with four critical and 141 high on bookworm. It retains the critical libxml2 and Go helper records, and is not adopted as remediation. No database major version or Compose image is changed.

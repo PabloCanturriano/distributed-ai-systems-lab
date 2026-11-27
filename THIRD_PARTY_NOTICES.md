@@ -35,8 +35,21 @@ Redis server 8 offers AGPLv3, RSALv2 and SSPLv1 alternatives; see the [publisher
 
 The Debian packages in project-owned images also retain their individual terms. Keep the recorded source-package versions, corresponding source availability and preserved copyright texts with release evidence. A machine-generated SBOM alone is not a source offer or a complete NOTICE review.
 
-## Inherited-layer review
+## Filtered-runtime candidate and corresponding sources
 
-Deleting npm/Yarn from the merged runtime filesystem does not remove their bytes from inherited OCI layers. A separate inventory of the exact Node base image therefore accompanies the application-role inventories. The observed base contains 145 npm packages and 230 detected legal files; four package texts remain unresolved: `@npmcli/agent@4.0.2`, `@sigstore/verify@3.1.1`, `spdx-exceptions@2.5.0` and `spdx-license-ids@3.0.23`. Their declared terms are respectively ISC, Apache-2.0, CC-BY-3.0 and CC0-1.0.
+The new uncommitted packaging candidate exports only Node and its required glibc/libgcc/libstdc++ files into an empty OCI base; it does not inherit official Node image layers. Its ledger preserves exact file hashes, Debian binary/source package versions and original copyright texts. The release preparer rejects shared base layers, mismatched runtime ledgers and missing notices. This removes the previously recorded four missing npm-tool notices from the distributed candidate by excluding their bytes, rather than substituting unrelated license text. Existing published source still uses the earlier runtime until this patch is approved.
 
-The exact recorded source trees were inspected. A fixture's license must not be substituted for the agent's license, and a declaration/link is not relabeled as an archived complete notice. The prepared release builder inventories the base separately and blocks incomplete inherited-layer notices. The final notice/source-availability gate remains open until these records and native/static coverage have been reviewed; zero missing package texts in the eight merged application images does not close it.
+`scripts/export-runtime-sources.mjs` archives the exact `base-files`, `glibc` and `gcc-12` source packages represented by the retained runtime. It verifies Debian Snapshot file identity and size, then checks archive SHA256 values against the source descriptor. The descriptor signature is not independently verified. Actual local output contains three source packages and eight files; the per-architecture release evidence must retain them with its checksummed manifest. Downloaded sources are not executed or extracted.
+
+## Native supplemental notice references
+
+These original upstream legal texts are included in the candidate and notice export. They supplement the vendor's original bundled notices; they do not by themselves establish a complete native bill of materials or a corrected binary.
+
+| Text                                                                     | Upstream identity                                                                                      | SHA256                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [OpenSSL](third-party/licenses/LICENSE.native-openssl.txt)               | [openssl-3.5.8](https://github.com/openssl/openssl/blob/openssl-3.5.8/LICENSE.txt)                     | `7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a` |
+| [zlib](third-party/licenses/LICENSE.native-zlib.txt)                     | [v1.3.2](https://github.com/madler/zlib/blob/v1.3.2/LICENSE)                                           | `e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2` |
+| [Zstandard](third-party/licenses/LICENSE.native-zstd.txt)                | [v1.5.7](https://github.com/facebook/zstd/blob/v1.5.7/LICENSE)                                         | `7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8` |
+| [curl reference](third-party/licenses/LICENSE.native-curl-reference.txt) | [revision d5ec024](https://github.com/curl/curl/blob/d5ec024cf205997c6a3416b2998953ce7cf23fcb/COPYING) | `82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681` |
+
+The curl text is an explicitly identified reference, not evidence of the embedded curl version. Zstandard 1.5.7 is confirmed by the ARM64 addon's version function. Its missing security correction is recorded in [ADR-0010](docs/adr/0010-reproducible-kafka-native-build.md). The complete native notice/security gate remains open pending a source-identified build or corrected vendor artifact.

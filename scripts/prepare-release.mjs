@@ -48,26 +48,8 @@ const baseRef = readFileSync('infra/docker/Dockerfile', 'utf8').match(
 )?.[1];
 if (!baseRef) throw Error('Pinned Node base identity is required');
 run('docker', ['pull', baseRef]);
-const baseImage = JSON.parse(run('docker', ['image', 'inspect', baseRef]))[0]
-  .Id;
-run(process.execPath, [
-  'scripts/export-image-notices.mjs',
-  baseImage,
-  join(root, 'base-node.notices'),
-]);
-const baseNotices = JSON.parse(
-  readFileSync(join(root, 'base-node.notices/manifest.json'), 'utf8'),
-);
-if (
-  baseNotices.packages.some(
-    (pkg) => pkg.missingLicenseText || !pkg.declaredLicense,
-  ) ||
-  baseNotices.skippedLinks.length
-)
-  blocked.push({
-    role: 'base-node',
-    issues: ['incomplete_inherited_layer_notices'],
-  });
+const baseImage = JSON.parse(run('docker', ['image', 'inspect', baseRef]))[0];
+let runtimeInventory;
 for (const role of plan.roles) {
   const local = `lab-release-${role}:${plan.revision}-${arch}`;
   console.log(JSON.stringify({ event: 'release_image_build', role, arch }));
@@ -81,7 +63,14 @@ for (const role of plan.roles) {
     local,
     '.',
   ]);
-  const image = JSON.parse(run('docker', ['image', 'inspect', local]))[0].Id;
+  const inspection = JSON.parse(run('docker', ['image', 'inspect', local]))[0];
+  const image = inspection.Id;
+  if (
+    inspection.RootFS.Layers.some((layer) =>
+      baseImage.RootFS.Layers.includes(layer),
+    )
+  )
+    throw Error('Unfiltered base layer is still distributed');
   const reportPath = join(root, `${role}.scan.json`);
   run(scanner, [
     'image',
@@ -112,6 +101,28 @@ for (const role of plan.roles) {
   const notices = JSON.parse(
     readFileSync(join(root, `${role}.notices/manifest.json`), 'utf8'),
   );
+  const profile = notices.runtimeInventory;
+  if (
+    profile?.profile !== 'filtered-node-glibc-v1' ||
+    profile.sourceImage !== baseRef ||
+    profile.architecture !== arch
+  )
+    throw Error('Filtered runtime provenance mismatch');
+  if (
+    runtimeInventory &&
+    JSON.stringify(runtimeInventory) !== JSON.stringify(profile)
+  )
+    throw Error('Role runtime inventories differ');
+  if (!runtimeInventory) {
+    runtimeInventory = profile;
+    const inventoryPath = join(root, 'runtime-inventory.json');
+    writeFileSync(inventoryPath, JSON.stringify(profile, null, 2) + '\n');
+    run(process.execPath, [
+      'scripts/export-runtime-sources.mjs',
+      inventoryPath,
+      join(root, 'corresponding-sources'),
+    ]);
+  }
   const issues = assessReleaseImage(
     JSON.parse(readFileSync(reportPath, 'utf8')),
     notices,

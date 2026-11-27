@@ -46,11 +46,16 @@ FROM worker-dependencies AS relay-dependencies
 COPY infra/docker/prepare-kafka-native.mjs /tmp/prepare-kafka-native.mjs
 RUN node /tmp/prepare-kafka-native.mjs
 
-FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime
-# Dependencies are installed in build stages; runtime commands invoke Node directly.
-RUN rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* \
-    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
+FROM node:24.22.3-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime-files
+COPY infra/docker/prepare-runtime.mjs /tmp/prepare-runtime.mjs
+COPY infra/docker/Dockerfile /tmp/source.Dockerfile
+RUN node /tmp/prepare-runtime.mjs /runtime-root /tmp/source.Dockerfile
+
+# Export only the retained filesystem: excluded tools are absent from every layer.
+FROM scratch AS runtime
+COPY --from=runtime-files /runtime-root/ /
 ENV NODE_ENV=production APP_MODE=local
+ENV PATH=/usr/local/bin
 WORKDIR /app
 COPY LICENSE NOTICE ./
 COPY third-party/licenses ./third-party/licenses

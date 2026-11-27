@@ -122,6 +122,12 @@ try {
       require('@lab/configuration');
       assert.match(fs.readFileSync('/app/LICENSE', 'utf8'), /Apache License/);
       assert.match(fs.readFileSync('/app/NOTICE', 'utf8'), /distributed-ai-systems-lab/);
+      const runtime = JSON.parse(fs.readFileSync('/app/runtime-inventory.json','utf8'));
+      assert.equal(runtime.profile,'filtered-node-glibc-v1');
+      assert.ok(runtime.osPackages.length >= 4);
+      assert.equal(runtime.nodeVersions.node,process.versions.node);
+      assert.match(fs.readFileSync('/usr/share/common-licenses/LGPL-2.1','utf8'),/GNU LESSER GENERAL PUBLIC LICENSE/);
+      for(const path of ['/bin/sh','/bin/bash','/usr/bin/apt','/usr/bin/dpkg-query','/usr/local/lib/node_modules/corepack']) assert.equal(fs.existsSync(path),false,path+' must be excluded');
       for (const path of ['/usr/local/lib/node_modules/npm', '/usr/local/bin/npm', '/usr/local/bin/npx', '/usr/local/bin/yarn', '/usr/local/bin/yarnpkg']) {
         assert.equal(fs.existsSync(path), false, path + ' must be absent from runtime');
       }

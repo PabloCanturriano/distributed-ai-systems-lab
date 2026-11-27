@@ -123,27 +123,54 @@ export function collectImageNotices({
   if (modules === '/app/node_modules')
     visitModules('/usr/local/lib/node_modules');
   if (osDocs && existsSync(osDocs)) legalFiles(osDocs, osDocs, true);
+  if (osDocs && existsSync('/usr/share/common-licenses'))
+    for (const name of readdirSync('/usr/share/common-licenses')) {
+      const path = join('/usr/share/common-licenses', name);
+      if (lstatSync(path).isFile()) capture(path, path);
+    }
   if (osDocs && existsSync('/opt')) legalFiles('/opt', '/opt', true);
+  if (existsSync('/app/third-party/licenses'))
+    legalFiles('/app/third-party/licenses', '/app/third-party/licenses', true);
   for (const path of baseFiles)
     if (existsSync(path) && lstatSync(path).isFile()) capture(path, path);
-  const osPackages = osDocs
-    ? execFileSync(
-        'dpkg-query',
-        [
-          '-W',
-          '-f=${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n',
-        ],
-        { encoding: 'utf8' },
+  const runtimeInventory = existsSync('/app/runtime-inventory.json')
+    ? JSON.parse(readFileSync('/app/runtime-inventory.json', 'utf8'))
+    : null;
+  if (runtimeInventory) {
+    if (
+      runtimeInventory.schemaVersion !== 1 ||
+      runtimeInventory.profile !== 'filtered-node-glibc-v1' ||
+      !Array.isArray(runtimeInventory.files)
+    )
+      throw Error('Unreviewed runtime inventory');
+    for (const file of runtimeInventory.files)
+      if (
+        createHash('sha256').update(readFileSync(file.path)).digest('hex') !==
+        file.sha256
       )
-        .trim()
-        .split('\n')
-        .map((line) => {
-          const [name, version, sourceName, sourceVersion] = line.split('\t');
-          return { name, version, sourceName, sourceVersion };
-        })
-    : [];
+        throw Error('Runtime file identity mismatch');
+  }
+  const osPackages =
+    runtimeInventory?.osPackages ??
+    (osDocs
+      ? execFileSync(
+          'dpkg-query',
+          [
+            '-W',
+            '-f=${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n',
+          ],
+          { encoding: 'utf8' },
+        )
+          .trim()
+          .split('\n')
+          .map((line) => {
+            const [name, version, sourceName, sourceVersion] = line.split('\t');
+            return { name, version, sourceName, sourceVersion };
+          })
+      : []);
   return {
     schemaVersion: 1,
+    runtimeInventory,
     osPackages,
     packages,
     files: [...files.values()],

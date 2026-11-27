@@ -60,6 +60,8 @@
 !infra/
 !infra/docker/
 !infra/docker/prepare-kafka-native.mjs
+!infra/docker/prepare-runtime.mjs
+!infra/docker/Dockerfile
 !infra/kafka/
 !infra/kafka/Dockerfile
 !infra/kafka/init-topics.sh
